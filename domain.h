@@ -941,12 +941,12 @@ namespace sph {
 		ofile << "Variables = \"X\",\"Y\",\"Temperature\",\"Boundary\",\"Fix\",\"Io\",\n";//
 		ofile << "Zone I=" << particles.size() << std::endl;
 		//ѭ��������vectorͷ�ļ�
-		for (std::vector<class particle*>::iterator i = particles.begin(); i != particles.end(); i++)
+		for (int i=0; i < particleNum(); i++)
 		{
-			int btype = (*i)->getBtype() == BoundaryType::Bulk ? 0 : 1;
-			int ftype = (*i)->getFtype() == FixType::Free ? 0 : 1;
-			int io = static_cast<int>((*i)->iotype);
-			ofile << (*i)->getX() << "\t" << (*i)->getY() << "\t" << (*i)->gettemperature() << "\t" << btype << "\t" << ftype << "\t" << io << std::endl;//
+			int btype = particlesa.getBtype(i) == BoundaryType::Bulk ? 0 : 1;
+			int ftype = particlesa.getFtype(i) == FixType::Free ? 0 : 1;
+			int io = static_cast<int>(particlesa.iotype[i]);
+			ofile << particlesa.getX(i) << "\t" << particlesa.getY(i) << "\t" << particlesa.gettemperature(i) << "\t" << btype << "\t" << ftype << "\t" << io << std::endl;//
 		}
 		ofile.close();
 	}
@@ -1057,9 +1057,9 @@ namespace sph {
 //#endif
 //			for (int j = 0; j < ii->neiblist.size(); j++)
 //			{
-//				const particle* jj = ii->neiblist[j];
-//				const double dvx = (ii)->vx - (jj)->vx;
-//				const double dvy = (ii)->vy - (jj)->vy;
+//				const int jj = particlesa.neiblist[i][j];
+//				const double dvx = particlesa.vx[i] - particlesa.vx[jj];
+//				const double dvy = particlesa.vy[i] - particlesa.vy[jj];
 //
 //				divv += (dvx * particlesa.dbweightx[i][j] + dvy * particlesa.dbweighty[i][j]) * particlesa.mass[jj] / particlesa.rho[jj];
 //			}
@@ -1583,9 +1583,9 @@ namespace sph {
 		pmax = 0;
 		for (int i = 0; i < particles.size(); i++) {
 			particle* ii = particles[i];
-			//if (ii->iotype != InoutType::Inlet) continue;
+			//if (particlesa.iotype[i] != InoutType::Inlet) continue;
 			//if (particlesa.btype[i] == sph::BoundaryType::Boundary) continue;
-			double p = (ii)->press;			
+			double p = particlesa.press[i];			
 			pmax = pmax > p ? pmax : p;
 			return pmax;
 		}
@@ -1733,24 +1733,24 @@ namespace sph {
 		ofile << "Title = \"Particle Information\"" << std::endl;
 		ofile << "Variables = \"X\",\"Y\",\"Vx\",\"Vy\",\"Ax\",\"Ay\",\"Fintx\",\"Finty\",\"Avx\",\"Avy\",\"Tx\",\"Ty\",\"Vel\",\"rho\",\"P\",\"drho\",\"bond\",\"Fluid\",\"Fix\",\"Bc\",\"Inout\",\"Idx\",\"vort\",\"Temperature\",\"Tempx\",\"Tempy\",\"Temp_t\",\"vcc\",\"Time\"" << std::endl;
 		ofile << "Zone T=\"Fluid\" I=" << particles.size() << std::endl;
-		for (auto i = particles.begin(); i != particles.end(); i++)
+		for (int i = 0; i <particleNum(); i++)
 		{
-			ofile << (*i)->getX() << '\t' << (*i)->getY() << '\t' << (*i)->getVx() << '\t' << (*i)->getVy() << '\t' << (*i)->getAx() << '\t' << (*i)->getAy()
-				<< '\t' << (*i)->getFx() << '\t' << (*i)->getFy() << '\t' << (*i)->getAvx() << '\t' << (*i)->getAvy() << '\t' << (*i)->getTx() << '\t' <<
-				(*i)->getTy() << '\t' << sqrt((*i)->getVx() * (*i)->getVx() + (*i)->getVy() * (*i)->getVy()) << '\t' << (*i)->getDensity() << '\t' << (*i)->getPress()
-				<< '\t' << (*i)->drho << '\t' << (*i)->neiblist.size() << '\t';
-			ofile << '\t' << static_cast<int>((*i)->fltype) << '\t' << static_cast<int>((*i)->ftype) << '\t' << static_cast<int>((*i)->btype) << '\t' << static_cast<int>((*i)->iotype) << '\t' << (*i)->idx
-				<< '\t' << (*i)->getvort() << '\t' << (*i)->gettemperature() << '\t' << (*i)->gettempx() << '\t' << (*i)->gettempy() << '\t' << (*i)->gettempt() << '\t' << (*i)->vcc << '\t' << time << std::endl;
+			ofile << particlesa.getX(i) << '\t' << particlesa.getY(i) << '\t' << particlesa.getVx(i) << '\t' << particlesa.getVy(i) << '\t' << particlesa.getAx(i) << '\t' << particlesa.getAy(i)
+				<< '\t' << particlesa.getFx(i) << '\t' << particlesa.getFy(i) << '\t' << particlesa.getAvx(i) << '\t' << particlesa.getAvy(i) << '\t' << particlesa.getTx(i) << '\t' <<
+				particlesa.getTy(i) << '\t' << sqrt(particlesa.getVx(i) * particlesa.getVx(i) + particlesa.getVy(i) * particlesa.getVy(i)) << '\t' << particlesa.getDensity(i) << '\t' << particlesa.getPress(i)
+				<< '\t' << particlesa.drho[i] << '\t' << particlesa.neibNum[i] << '\t';
+			ofile << '\t' << static_cast<int>(particlesa.fltype[i]) << '\t' << static_cast<int>(particlesa.ftype[i]) << '\t' << static_cast<int>(particlesa.btype[i]) << '\t' << static_cast<int>(particlesa.iotype[i]) << '\t' << particlesa.idx[i]
+				<< '\t' << particlesa.getvort(i) << '\t' << particlesa.gettemperature(i) << '\t' << particlesa.gettempx(i) << '\t' << particlesa.gettempy(i) << '\t' << particlesa.gettempt(i) << '\t' << particlesa.vcc[i] << '\t' << time << std::endl;
 		}
 		/*ofile << "Zone T=\"Ghosts\" I=" << ghosts.size() << std::endl;
 		for (auto i = ghosts.begin(); i != ghosts.end(); i++)
 		{
-			ofile << (*i)->getX() << '\t' << (*i)->getY() << '\t' << (*i)->getVx() << '\t' << (*i)->getVy() << '\t' << (*i)->getAx() << '\t' << (*i)->getAy()
-				<< '\t' << (*i)->getFx() << '\t' << (*i)->getFy() << '\t' << (*i)->getAvx() << '\t' << (*i)->getAvy() << '\t' << (*i)->getTx() << '\t' <<
-				(*i)->getTy() << '\t' << sqrt((*i)->getVx() * (*i)->getVx() + (*i)->getVy() * (*i)->getVy()) << '\t' << (*i)->getDensity() << '\t' << (*i)->getPress()
-				<< '\t' << (*i)->drho << '\t' << (*i)->neiblist.size();
-			ofile << '\t' << static_cast<int>((*i)->fltype) << '\t' << static_cast<int>((*i)->ftype) << '\t' << static_cast<int>((*i)->btype) << '\t' << static_cast<int>((*i)->iotype) << '\t' << (*i)->idx
-				<< '\t' << (*i)->getvort() << '\t' << (*i)->gettemperature() << '\t' << (*i)->gettempx() << '\t' << (*i)->gettempy() << '\t' << (*i)->gettempt() << '\t' << (*i)->vcc << std::endl;
+			ofile << particlesa.getX(i) << '\t' << particlesa.getY(i) << '\t' << particlesa.getVx(i) << '\t' << particlesa.getVy(i) << '\t' << particlesa.getAx(i) << '\t' << particlesa.getAy(i)
+				<< '\t' << particlesa.getFx(i) << '\t' << particlesa.getFy(i) << '\t' << particlesa.getAvx(i) << '\t' << particlesa.getAvy(i) << '\t' << particlesa.getTx(i) << '\t' <<
+				particlesa.getTy(i) << '\t' << sqrt(particlesa.getVx(i) * particlesa.getVx(i) + particlesa.getVy(i) * particlesa.getVy(i)) << '\t' << particlesa.getDensity(i) << '\t' << particlesa.getPress(i)
+				<< '\t' << particlesa.drho[i] << '\t' << particlesa.neibNum[i];
+			ofile << '\t' << static_cast<int>(particlesa.fltype[i]) << '\t' << static_cast<int>(particlesa.ftype[i]) << '\t' << static_cast<int>(particlesa.btype[i]) << '\t' << static_cast<int>(particlesa.iotype[i]) << '\t' << particlesa.idx[i]
+				<< '\t' << particlesa.getvort(i) << '\t' << particlesa.gettemperature(i) << '\t' << particlesa.gettempx(i) << '\t' << particlesa.gettempy(i) << '\t' << particlesa.gettempt(i) << '\t' << particlesa.vcc[i] << std::endl;
 		}*/
 		ofile.close();
 	}
@@ -1765,16 +1765,16 @@ namespace sph {
 		ofile << "Title = \"Particle Information of Fluid\"" << std::endl;
 		ofile << "Variables = \"X\",\"Y\",\"Vx\",\"Vy\",\"Ax\",\"Ay\",\"Fintx\",\"Finty\",\"Avx\",\"Avy\",\"Tx\",\"Ty\",\"Vel\",\"rho\",\"P\",\"drho\",\"bond\",\"Fluid\",\"Fix\",\"Bc\",\"Inout\",\"Idx\",\"vort\",\"Temperature\",\"Tempx\",\"Tempy\",\"Temp_t\",\"vcc\",\"Time\"" << std::endl;
 		ofile << "Zone T=\"Fluid\"" << std::endl;
-		for (auto i = particles.begin(); i != particles.end(); i++)
+		for (int i = 0; i <particleNum(); i++)
 		{
-			if (static_cast<int>((*i)->btype) == 1) continue;
-			if ((*i)->getX() <= 0.2 && (*i)->getX() >= 0 - 0.3 * dp) {
-				ofile << (*i)->getX() << '\t' << (*i)->getY() << '\t' << (*i)->getVx() << '\t' << (*i)->getVy() << '\t' << (*i)->getAx() << '\t' << (*i)->getAy()
-					<< '\t' << (*i)->getFx() << '\t' << (*i)->getFy() << '\t' << (*i)->getAvx() << '\t' << (*i)->getAvy() << '\t' << (*i)->getTx() << '\t' <<
-					(*i)->getTy() << '\t' << sqrt((*i)->getVx() * (*i)->getVx() + (*i)->getVy() * (*i)->getVy()) << '\t' << (*i)->getDensity() << '\t' << (*i)->getPress()
-					<< '\t' << (*i)->drho << '\t' << (*i)->neiblist.size() << '\t';
-				ofile << '\t' << static_cast<int>((*i)->fltype) << '\t' << static_cast<int>((*i)->ftype) << '\t' << static_cast<int>((*i)->btype) << '\t' << static_cast<int>((*i)->iotype) << '\t' << (*i)->idx
-					<< '\t' << (*i)->getvort() << '\t' << (*i)->gettemperature() << '\t' << (*i)->gettempx() << '\t' << (*i)->gettempy() << '\t' << (*i)->gettempt() << '\t' << (*i)->vcc << '\t' << time << std::endl;
+			if (static_cast<int>(particlesa.btype[i]) == 1) continue;
+			if (particlesa.getX(i) <= 0.2 && particlesa.getX(i) >= 0 - 0.3 * dp) {
+				ofile << particlesa.getX(i) << '\t' << particlesa.getY(i) << '\t' << particlesa.getVx(i) << '\t' << particlesa.getVy(i) << '\t' << particlesa.getAx(i) << '\t' << particlesa.getAy(i)
+					<< '\t' << particlesa.getFx(i) << '\t' << particlesa.getFy(i) << '\t' << particlesa.getAvx(i) << '\t' << particlesa.getAvy(i) << '\t' << particlesa.getTx(i) << '\t' <<
+					particlesa.getTy(i) << '\t' << sqrt(particlesa.getVx(i) * particlesa.getVx(i) + particlesa.getVy(i) * particlesa.getVy(i)) << '\t' << particlesa.getDensity(i) << '\t' << particlesa.getPress(i)
+					<< '\t' << particlesa.drho[i] << '\t' << particlesa.neibNum[i] << '\t';
+				ofile << '\t' << static_cast<int>(particlesa.fltype[i]) << '\t' << static_cast<int>(particlesa.ftype[i]) << '\t' << static_cast<int>(particlesa.btype[i]) << '\t' << static_cast<int>(particlesa.iotype[i]) << '\t' << particlesa.idx[i]
+					<< '\t' << particlesa.getvort(i) << '\t' << particlesa.gettemperature(i) << '\t' << particlesa.gettempx(i) << '\t' << particlesa.gettempy(i) << '\t' << particlesa.gettempt(i) << '\t' << particlesa.vcc[i] << '\t' << time << std::endl;
 			}
 		}		
 		ofile.close();
@@ -1794,58 +1794,58 @@ namespace sph {
 		//ofile << "Zone T=\"Fluid\" I=" << particles.size() << std::endl;
 		//ofile << "Zone T=\"Fluid\" I=" << 67 << std::endl;
 		ofile << "Zone T=\"X_0.1\"" << std::endl;
-		for (auto i = particles.begin(); i != particles.end(); i++)
+		for (int i = 0; i < particleNum(); i++)
 		{
-			double i_x = (*i)->getX() - (0.1);
+			double i_x = particlesa.getX(i) - (0.1);
 			double absi_x = abs(i_x);
-			if (static_cast<int>((*i)->btype) == 1) continue;
+			if (static_cast<int>(particlesa.btype[i]) == 1) continue;
 			if (absi_x < 0.5 * dp)
 			{
-				ofile << (*i)->getY() << '\t' << (*i)->getVx() << '\t' << (*i)->gettemperature() << '\t' << std::endl;
+				ofile << particlesa.getY(i) << '\t' << particlesa.getVx(i) << '\t' << particlesa.gettemperature(i) << '\t' << std::endl;
 			}
 		}
 		ofile << "Zone T=\"X_0.3\"" << std::endl;
-		for (auto i = particles.begin(); i != particles.end(); i++)
+		for (int i = 0; i < particleNum(); i++)
 		{
-			double i_x = (*i)->getX() - (0.3);
+			double i_x = particlesa.getX(i) - (0.3);
 			double absi_x = abs(i_x);
-			if (static_cast<int>((*i)->btype) == 1) continue;
+			if (static_cast<int>(particlesa.btype[i]) == 1) continue;
 			if (absi_x < 0.5 * dp)
 			{
-				ofile << (*i)->getY() << '\t' << (*i)->getVx() << '\t' << (*i)->gettemperature() << '\t' << std::endl;
+				ofile << particlesa.getY(i) << '\t' << particlesa.getVx(i) << '\t' << particlesa.gettemperature(i) << '\t' << std::endl;
 			}
 		}
 		ofile << "Zone T=\"X_0.5\"" << std::endl;
-		for (auto i = particles.begin(); i != particles.end(); i++)
+		for (int i = 0; i < particleNum(); i++)
 		{
-			double i_x = (*i)->getX() - (0.5);
+			double i_x = particlesa.getX(i) - (0.5);
 			double absi_x = abs(i_x);
-			if (static_cast<int>((*i)->btype) == 1) continue;
+			if (static_cast<int>(particlesa.btype[i]) == 1) continue;
 			if (absi_x < 0.5 * dp)
 			{
-				ofile << (*i)->getY() << '\t' << (*i)->getVx() << '\t' << (*i)->gettemperature() << '\t' << std::endl;
+				ofile << particlesa.getY(i) << '\t' << particlesa.getVx(i) << '\t' << particlesa.gettemperature(i) << '\t' << std::endl;
 			}
 		}
 		ofile << "Zone T=\"X_0.7\"" << std::endl;
-		for (auto i = particles.begin(); i != particles.end(); i++)
+		for (int i = 0; i < particleNum(); i++)
 		{
-			double i_x = (*i)->getX() - (0.7);
+			double i_x = particlesa.getX(i) - (0.7);
 			double absi_x = abs(i_x);
-			if (static_cast<int>((*i)->btype) == 1) continue;
+			if (static_cast<int>(particlesa.btype[i]) == 1) continue;
 			if (absi_x < 0.5 * dp)
 			{
-				ofile << (*i)->getY() << '\t' << (*i)->getVx() << '\t' << (*i)->gettemperature() << '\t' << std::endl;
+				ofile << particlesa.getY(i) << '\t' << particlesa.getVx(i) << '\t' << particlesa.gettemperature(i) << '\t' << std::endl;
 			}
 		}
 		ofile << "Zone T=\"X_0.9\"" << std::endl;
-		for (auto i = particles.begin(); i != particles.end(); i++)
+		for (int i = 0; i < particleNum(); i++)
 		{
-			double i_x = (*i)->getX() - (0.9);
+			double i_x = particlesa.getX(i) - (0.9);
 			double absi_x = abs(i_x);
-			if (static_cast<int>((*i)->btype) == 1) continue;
+			if (static_cast<int>(particlesa.btype[i]) == 1) continue;
 			if (absi_x < 0.5 * dp)
 			{
-				ofile << (*i)->getY() << '\t' << (*i)->getVx() << '\t' << (*i)->gettemperature() << '\t' << std::endl;
+				ofile << particlesa.getY(i) << '\t' << particlesa.getVx(i) << '\t' << particlesa.gettemperature(i) << '\t' << std::endl;
 			}
 		}		
 		ofile.close();
@@ -1864,15 +1864,15 @@ namespace sph {
 		ofile << "Variables = \"Y\",\"Vx\",\"Temperature\",\"Time\"" << std::endl;
 		//ofile << "Zone T=\"Fluid\" I=" << particles.size() << std::endl;
 		ofile << "Zone T=\"Fluid\"" << std::endl;
-		for (auto i = particles.begin(); i != particles.end(); i++)
+		for (int i = 0; i < particleNum(); i++)
 		{
-			double i_x = (*i)->getX() - (0.1);
+			double i_x = particlesa.getX(i) - (0.1);
 			double absi_x = abs(i_x);
 			double lengthx = dp * 0.5;
-			if (static_cast<int>((*i)->btype) == 1) continue;
+			if (static_cast<int>(particlesa.btype[i]) == 1) continue;
 			if (absi_x < lengthx)
 			{
-				ofile << (*i)->getY() << '\t' << (*i)->getVx() << '\t' << (*i)->gettemperature() << '\t' << time << std::endl;
+				ofile << particlesa.getY(i) << '\t' << particlesa.getVx(i) << '\t' << particlesa.gettemperature(i) << '\t' << time << std::endl;
 			}
 		}
 		ofile.close();
@@ -1917,7 +1917,7 @@ namespace sph {
 			 }
 			 if (xi > outletBcxEdge) {
 				 particlesa.x[i] = xi - lengthofx;//减去流体域长度和inlet长度
-				 (ii)->setIotype(InoutType::Inlet);
+				 particlesa.setIotype(InoutType::Inlet,i);
 			 }
 		}
 						
@@ -1934,15 +1934,15 @@ namespace sph {
 		for (int i = 0; i < particles.size(); i++)
 		{
 			//if (particles[i]->btype == sph::BoundaryType::Boundary) continue;
-			particle* ii = particles[i];
+			//particle* ii = particles[i];
 			/* code */
 			//(*i)->storeHalf();
-			(ii)->half_x = particlesa.x[i];//i时刻的位置
-			(ii)->half_y = particlesa.y[i];
-			(ii)->half_vx = (ii)->vx;//i时刻的速度
-			(ii)->half_vy = (ii)->vy;
-			(ii)->half_rho = particlesa.rho[i];
-			(ii)->half_temperature = (ii)->temperature;
+			particlesa.half_x[i] = particlesa.x[i];//i时刻的位置
+			particlesa.half_y[i] = particlesa.y[i];
+			particlesa.half_vx[i] = particlesa.vx[i];//i时刻的速度
+			particlesa.half_vy[i] = particlesa.vy[i];
+			particlesa.half_rho[i] = particlesa.rho[i];
+			particlesa.half_temperature[i] = particlesa.temperature[i];
 		}
 
 		//-------------predictor------------
@@ -1957,25 +1957,25 @@ namespace sph {
 		for (int i = 0; i < particles.size(); i++)
 		{
 			/* code */
-			particle* ii = particles[i];
+			//particle* ii = particles[i];
 			//(*i)->integration1sthalf(dt2);
 			if (particlesa.btype[i] == sph::BoundaryType::Boundary) continue;
 			
-			if ((ii)->ftype != sph::FixType::Fixed) {
-				particlesa.rho[i] = (ii)->half_rho + (ii)->drho * dt2;
-				(ii)->vx = (ii)->half_vx + particlesa.ax[i] * dt2;//(i+0.5*dt)时刻的速度
-				(ii)->vy = (ii)->half_vy + particlesa.ay[i] * dt2;
-				(ii)->vol = particlesa.mass[i] / particlesa.rho[i];											
-				(ii)->temperature = (ii)->half_temperature + (ii)->temperature_t * dt2;
+			if (particlesa.ftype[i] != sph::FixType::Fixed) {
+				particlesa.rho[i] = particlesa.half_rho[i] + particlesa.drho[i] * dt2;
+				particlesa.vx[i] = particlesa.half_vx[i] + particlesa.ax[i] * dt2;//(i+0.5*dt)时刻的速度
+				particlesa.vy[i] = particlesa.half_vy[i] + particlesa.ay[i] * dt2;
+				particlesa.vol[i] = particlesa.mass[i] / particlesa.rho[i];											
+				particlesa.temperature[i] = particlesa.half_temperature[i] + particlesa.temperature_t[i] * dt2;
 			}
-			particlesa.x[i] = (ii)->half_x + (ii)->vx * dt2;//-----------------------
-			 double y = (ii)->half_y + (ii)->vy * dt2;//加个判断，防止冲进边界
+			particlesa.x[i] = particlesa.half_x[i] + particlesa.vx[i] * dt2;//-----------------------
+			 double y = particlesa.half_y[i] + particlesa.vy[i] * dt2;//加个判断，防止冲进边界
 			 /*if (y > indiameter * 0.5 - dp|| y < -indiameter * 0.5 + dp) {
-				 y = (ii)->half_y;
+				 y = particlesa.half_y[i];
 			 }	*/		
 			particlesa.y[i] = y;
-			const double vx = (ii)->vx;
-			const double vy = (ii)->vy;
+			const double vx = particlesa.vx[i];
+			const double vy = particlesa.vy[i];
 			const double vel = sqrt(vx * vx + vy * vy);
 #pragma omp critical
 			if (vmax < vel)
@@ -1998,23 +1998,23 @@ namespace sph {
 			/* code */
 			particle* ii = particles[i];
 			//(*i)->integrationfull(dt);
-			//if (particlesa.btype[i] == sph::BoundaryType::Boundary) { (ii)->shift_c = 0; continue; }
+			//if (particlesa.btype[i] == sph::BoundaryType::Boundary) { particlesa.shift_c[i] = 0; continue; }
 
-			if ((ii)->ftype != sph::FixType::Fixed) {
-				particlesa.rho[i] = (ii)->half_rho + (ii)->drho * dt;//i时刻的密度+(i+0.5*dt)时刻的密度变化率×dt			 
-				(ii)->vx = (ii)->half_vx + particlesa.ax[i] * dt;//i时刻的速度+(i+0.5*dt)时刻的加速度×dt
-				(ii)->vy = (ii)->half_vy + particlesa.ay[i] * dt;
-				(ii)->vol = particlesa.mass[i] / particlesa.rho[i];				
-				particlesa.x[i] = (ii)->half_x + (ii)->vx * dt;//i时刻的位置+(i+*dt)时刻的速度×dt---------------------
-				//particlesa.y[i] = (ii)->half_y + (ii)->vy * dt;
-				double y = (ii)->half_y + (ii)->vy * dt;//加个判断，防止冲进边界
+			if (particlesa.ftype[i] != sph::FixType::Fixed) {
+				particlesa.rho[i] = particlesa.half_rho[i] + particlesa.drho[i] * dt;//i时刻的密度+(i+0.5*dt)时刻的密度变化率×dt			 
+				particlesa.vx[i] = particlesa.half_vx[i] + particlesa.ax[i] * dt;//i时刻的速度+(i+0.5*dt)时刻的加速度×dt
+				particlesa.vy[i] = particlesa.half_vy[i] + particlesa.ay[i] * dt;
+				particlesa.vol[i] = particlesa.mass[i] / particlesa.rho[i];				
+				particlesa.x[i] = particlesa.half_x[i] + particlesa.vx[i] * dt;//i时刻的位置+(i+*dt)时刻的速度×dt---------------------
+				//particlesa.y[i] = particlesa.half_y[i] + particlesa.vy[i] * dt;
+				double y = particlesa.half_y[i] + particlesa.vy[i] * dt;//加个判断，防止冲进边界
 				/*if (y > indiameter * 0.5 - dp || y < -indiameter * 0.5 + dp) {
-					y = (ii)->half_y;
+					y = particlesa.half_y[i];
 				}*/				
 				particlesa.y[i] = y;
-				(ii)->ux += (ii)->vx * dt;
-				(ii)->uy += (ii)->vy * dt;
-				(ii)->temperature = (ii)->half_temperature + (ii)->temperature_t * dt;
+				particlesa.ux[i] += particlesa.vx[i] * dt;
+				particlesa.uy[i] += particlesa.vy[i] * dt;
+				particlesa.temperature[i] = particlesa.half_temperature[i] + particlesa.temperature_t[i] * dt;
 			}			
 			if (stype != ShiftingType::DivC) continue;
 
@@ -2026,18 +2026,18 @@ namespace sph {
 
 			for (int j = 0; j < particlesa.neibNum[i]; j++)
 			{
-				const particle* jj = ii->neiblist[j];
+				const int jj = particlesa.neiblist[i][j];
 				const double rho_j = particlesa.rho[jj];
 				const double massj = particlesa.mass[jj];
 				shift_c += particlesa.bweight[i][j] * massj / rho_j;
 			}
-			(ii)->shift_c = shift_c;
+			particlesa.shift_c[i] = shift_c;
 		}
 
 		//this->updateBufferPos(dt);
 		//this->updateGhostPos();
 
-		//for (auto i = particles.begin(); i != particles.end(); i++)
+		//for (int i = 0; i < particleNum(); i++)
 		//{
 			/* code */
 			//(*i)->shifting_c();
@@ -2052,12 +2052,12 @@ namespace sph {
 			for (int i = 0; i < particles.size(); i++)
 			{
 				/* code */
-				particle* ii = particles[i];
+				//particle* ii = particles[i];
 				//(*i)->shifting(dt);
 				if (particlesa.btype[i] == sph::BoundaryType::Boundary) continue;
-				//if ((ii)->ftype != sph::FixType::Free) continue;
+				//if (particlesa.ftype[i] != sph::FixType::Free) continue;
 				const double hsml = particlesa.hsml[i];
-				const double conc = (ii)->shift_c;
+				const double conc = particlesa.shift_c[i];
 
 				double shift_x = 0;
 				double shift_y = 0;
@@ -2067,29 +2067,29 @@ namespace sph {
 #endif
 				for (int j = 0; j < particlesa.neibNum[i]; j++)
 				{
-					const particle* jj = ii->neiblist[j];
+					const int jj = particlesa.neiblist[i][j];
 					const double mhsml = (hsml + particlesa.hsml[jj]) * 0.5;
-					const double conc_ij = (jj)->shift_c - conc;
+					const double conc_ij = particlesa.shift_c[jj] - conc;
 
 					shift_x += conc_ij * particlesa.mass[jj] / particlesa.rho[jj] * particlesa.dbweightx[i][j];
 					shift_y += conc_ij * particlesa.mass[jj] / particlesa.rho[jj] * particlesa.dbweighty[i][j];
 				}
-				const double vx = (ii)->vx;
-				const double vy = (ii)->vy;
+				const double vx = particlesa.vx[i];
+				const double vy = particlesa.vy[i];
 				const double vel = sqrt(vx * vx + vy * vy);
 				shift_x *= -2.0 * dp * vel * dt * shiftingCoe;
 				shift_y *= -2.0 * dp * vel * dt * shiftingCoe;
 
-				(ii)->shift_x = shift_x;
-				(ii)->shift_y = shift_y;
+				particlesa.shift_x[i] = shift_x;
+				particlesa.shift_y[i] = shift_y;
 
 				particlesa.x[i] += shift_x;
 				particlesa.y[i] += shift_y;
-				(ii)->ux += shift_x;
-				(ii)->uy += shift_y;
+				particlesa.ux[i] += shift_x;
+				particlesa.uy[i] += shift_y;
 
-				const double ux = ii->ux;
-				const double uy = ii->uy;
+				const double ux = particlesa.ux[i];
+				const double uy = particlesa.uy[i];
 				const double disp = sqrt(ux * ux + uy * uy);
 #pragma omp critical
 				{
@@ -2111,13 +2111,13 @@ namespace sph {
 			for (int i = 0; i < particles.size(); i++)
 			{
 				/* code */
-				particle* ii = particles[i];
+				//particle* ii = particles[i];
 				//(*i)->shifting(dt);
 				if (particlesa.btype[i] == sph::BoundaryType::Boundary) continue;
-				//if ((ii)->ftype != sph::FixType::Free) continue;
+				//if (particlesa.ftype[i] != sph::FixType::Free) continue;
 				const double hsml = particlesa.hsml[i];
 				const double rho_i = particlesa.rho[i];
-				const double c0 = (ii)->c0;
+				const double c0 = particlesa.c0[i];
 
 				double shift_x = 0;
 				double shift_y = 0;
@@ -2127,32 +2127,32 @@ namespace sph {
 #endif
 				for (int j = 0; j < particlesa.neibNum[i]; j++)
 				{
-					const particle* jj = ii->neiblist[j];
+					const int jj = particlesa.neiblist[i][j];
 					const double frac = particlesa.bweight[i][j] / bweightdx;
 					const double head = 1.0 + 0.2 * pow(frac, 4);
-					const double rho_j = jj->rho;
+					const double rho_j = particlesa.rho[jj];
 					const double rho_ij = rho_i + rho_j;
-					const double mass_j = jj->mass;
+					const double mass_j = particlesa.mass[jj];
 
 					shift_x += head * particlesa.dbweightx[i][j] * mass_j / rho_ij;
 					shift_y += head * particlesa.dbweighty[i][j] * mass_j / rho_ij;
 				}
-				const double vx = (ii)->vx;
-				const double vy = (ii)->vy;
+				const double vx = particlesa.vx[i];
+				const double vy = particlesa.vy[i];
 				const double vel = sqrt(vx * vx + vy * vy);
 				shift_x *= -8.0 * dp * dp * vel / c0 * shiftingCoe;
 				shift_y *= -8.0 * dp * dp * vel / c0 * shiftingCoe;
 
-				(ii)->shift_x = shift_x;
-				(ii)->shift_y = shift_y;
+				particlesa.shift_x[i] = shift_x;
+				particlesa.shift_y[i] = shift_y;
 
 				particlesa.x[i] += shift_x;
 				particlesa.y[i] += shift_y;
-				(ii)->ux += shift_x;
-				(ii)->uy += shift_y;
+				particlesa.ux[i] += shift_x;
+				particlesa.uy[i] += shift_y;
 
-				const double ux = ii->ux;
-				const double uy = ii->uy;
+				const double ux = particlesa.ux[i];
+				const double uy = particlesa.uy[i];
 				const double disp = sqrt(ux * ux + uy * uy);
 #pragma omp critical
 				{
@@ -2178,13 +2178,13 @@ namespace sph {
 		{
 			particle* ii = particles[i];
 			if (particlesa.btype[i] == sph::BoundaryType::Boundary) continue;
-			const double c0 = (ii)->c0;
-			const double rho0 = particlesa.rho[i]0;
+			const double c0 = particlesa.c0[i];
+			const double rho0 = particlesa.rho0[i];
 			const double rhoi = particlesa.rho[i];			
 			const double gamma = (ii)->gamma;		
 			const double b = c0 * c0 * rho0 / gamma;     //b--B,
 			const double p_back = (ii)->back_p;
-//			if (ii->iotype == InoutType::Inlet) {
+//			if (particlesa.iotype[i] == InoutType::Inlet) {
 //				// interpolation
 //				double p = 0;
 //				double pmax = DBL_MIN;
@@ -2194,7 +2194,7 @@ namespace sph {
 //#endif
 //				for (int j = 0; j < ii->neiblist.size(); j++)
 //				{
-//					const particle* jj = ii->neiblist[j];
+//					const int jj = particlesa.neiblist[i][j];
 //					if (particlesa.iotype[i] == particlesa.iotype[jj]) continue;
 //					const double mass_j = particlesa.mass[jj];
 //					const double rho_j = particlesa.rho[jj];
@@ -2203,16 +2203,16 @@ namespace sph {
 //					vcc += particlesa.bweight[i][j];					
 //				}
 //				p = vcc > 0.00000001 ? p / vcc : 0;				
-//				(ii)->vcc = vcc;
-//				(ii)->press = p; // inlet部分的压力是做的插值求得，按道理应该略大于右边粒子的压力，才会产生推的作用。
-//				//(ii)->press = 0;			
+//				particlesa.vcc[i] = vcc;
+//				particlesa.press[i] = p; // inlet部分的压力是做的插值求得，按道理应该略大于右边粒子的压力，才会产生推的作用。
+//				//particlesa.press[i] = 0;			
 //			}
 //			else
 			//inlet和outlet的压力应该单独设置
-				(ii)->press = b * (pow(rhoi / rho0, gamma) - 1.0) + p_back;      // 流体区
+				particlesa.press[i] = b * (pow(rhoi / rho0, gamma) - 1.0) + p_back;      // 流体区
 				
-			if ((ii)->press < p_back) 
-				(ii)->press = p_back;
+			if (particlesa.press[i] < p_back) 
+				particlesa.press[i] = p_back;
 		}
 		this->updateWeight();
 		// boundary pressure  and 无滑移速度边界条件	上下固壁为自由滑移，圆柱边界为无滑移边界
@@ -2221,7 +2221,7 @@ namespace sph {
 #endif
 		for (int i = 0; i < particles.size(); i++)
 		{
-			particle* ii = particles[i];
+			//particle* ii = particles[i];
 			if (particlesa.btype[i] != sph::BoundaryType::Boundary) continue;
 			//if (particlesa.iotype[i] == sph::InoutType::Buffer) continue;			
 			double p = 0, vcc = 0;
@@ -2231,26 +2231,26 @@ namespace sph {
 #endif
 			for (int j = 0; j < particlesa.neibNum[i]; j++)
 			{
-				const particle* jj = ii->neiblist[j];
-				//if (particlesa.btype[i] == (jj)->btype) continue;//Buffer粒子也在这里，导致流出边界固壁的压力不正常
-				if ((jj)->ftype == sph::FixType::Fixed) continue;//其他固壁粒子不参与，ghost不参与，buffer参与
+				const int jj = particlesa.neiblist[i][j];
+				//if (particlesa.btype[i] == particlesa.btype[jj]) continue;//Buffer粒子也在这里，导致流出边界固壁的压力不正常
+				if (particlesa.ftype[jj] == sph::FixType::Fixed) continue;//其他固壁粒子不参与，ghost不参与，buffer参与
 				const double mass_j = particlesa.mass[jj];
 				const double rho_j = particlesa.rho[jj];
 				const double p_k = particlesa.press[jj];
 				p += p_k * particlesa.bweight[i][j];//
 				vcc += particlesa.bweight[i][j];
-				v_x += (jj)->vx * particlesa.bweight[i][j];//需要将速度沿法线分解，还没分
-				v_y += (jj)->vy * particlesa.bweight[i][j];				
+				v_x += particlesa.vx[jj] * particlesa.bweight[i][j];//需要将速度沿法线分解，还没分
+				v_y += particlesa.vy[jj] * particlesa.bweight[i][j];				
 			}
 			p = vcc > 0.00000001 ? p / vcc : 0;//p有值
 			v_x = vcc > 0.00000001 ? v_x / vcc : 0;//v_x一直为0！待解决
 			v_y = vcc > 0.00000001 ? v_y / vcc : 0;				
 			double vx0 = 0;
 			double vy0 = 0;
-			(ii)->vcc = vcc;
-			(ii)->press = p;
-			(ii)->vx = 2.0*vx0 - v_x;//无滑移，要改成径向，切向
-			(ii)->vy = 2.0*vy0 - v_y;							
+			particlesa.vcc[i] = vcc;
+			particlesa.press[i] = p;
+			particlesa.vx[i] = 2.0*vx0 - v_x;//无滑移，要改成径向，切向
+			particlesa.vy[i] = 2.0*vy0 - v_y;							
 		}
 		//this->updateGhostInfo();
 		//this->Ghost2bufferInfo();
@@ -2261,7 +2261,7 @@ namespace sph {
 #endif
 		for (int i = 0; i < particles.size(); i++)
 		{
-			particle* ii = particles[i];
+			//particle* ii = particles[i];
 
 			if (particlesa.btype[i] == sph::BoundaryType::Boundary) continue;//边界粒子没有计算M矩阵
 			const double rho_i = particlesa.rho[i];
@@ -2294,7 +2294,7 @@ namespace sph {
 #endif
 			for (int j = 0; j < particlesa.neibNum[i]; j++)
 			{
-				const particle* jj = ii->neiblist[j];
+				const int jj = particlesa.neiblist[i][j];
 				if (particlesa.bweight[i][j] < 0.000000001) continue;
 				const double xj = particlesa.x[jj];
 				const double yj = particlesa.y[jj];
@@ -2376,35 +2376,35 @@ namespace sph {
 			m_12 = -matrix[0][1] / det;
 			m_21 = m_12;
 			m_22 = matrix[0][0] / det;
-			(ii)->m_11 = m_11;//k矩阵求逆
-			(ii)->m_12 = m_12;
-			(ii)->m_21 = m_21;
-			(ii)->m_22 = m_22;    
+			particlesa.m_11[i] = m_11;//k矩阵求逆
+			particlesa.m_12[i] = m_12;
+			particlesa.m_21[i] = m_21;
+			particlesa.m_22[i] = m_22;    
 			// 二阶
 			//求逆
 			inverseMatrix(matrix, inverse, size); 
 			/*std::cout << "Inverse matrix of particle" <<i<< std::endl;
 			displayMatrix(inverse, size);*/						
-			(ii)->M_11 = inverse[0][0];
-			(ii)->M_12 = inverse[0][1];
-			(ii)->M_13 = inverse[0][2];
-			(ii)->M_14 = inverse[0][3];
-			(ii)->M_15 = inverse[0][4];
-			(ii)->M_21 = inverse[1][0];
-			(ii)->M_22 = inverse[1][1];
-			(ii)->M_23 = inverse[1][2];
-			(ii)->M_24 = inverse[1][3];
-			(ii)->M_25 = inverse[1][4];
-			(ii)->M_31 = inverse[2][0];//M的二阶逆矩阵的部分元素
-			(ii)->M_32 = inverse[2][1];
-			(ii)->M_33 = inverse[2][2];
-			(ii)->M_34 = inverse[2][3];
-			(ii)->M_35 = inverse[2][4];
-			(ii)->M_51 = inverse[4][0];
-			(ii)->M_52 = inverse[4][1];
-			(ii)->M_53 = inverse[4][2];
-			(ii)->M_54 = inverse[4][3];
-			(ii)->M_55 = inverse[4][4];
+			particlesa.M_11[i] = inverse[0][0];
+			particlesa.M_12[i] = inverse[0][1];
+			particlesa.M_13[i] = inverse[0][2];
+			particlesa.M_14[i] = inverse[0][3];
+			particlesa.M_15[i] = inverse[0][4];
+			particlesa.M_21[i] = inverse[1][0];
+			particlesa.M_22[i] = inverse[1][1];
+			particlesa.M_23[i] = inverse[1][2];
+			particlesa.M_24[i] = inverse[1][3];
+			particlesa.M_25[i] = inverse[1][4];
+			particlesa.M_31[i] = inverse[2][0];//M的二阶逆矩阵的部分元素
+			particlesa.M_32[i] = inverse[2][1];
+			particlesa.M_33[i] = inverse[2][2];
+			particlesa.M_34[i] = inverse[2][3];
+			particlesa.M_35[i] = inverse[2][4];
+			particlesa.M_51[i] = inverse[4][0];
+			particlesa.M_52[i] = inverse[4][1];
+			particlesa.M_53[i] = inverse[4][2];
+			particlesa.M_54[i] = inverse[4][3];
+			particlesa.M_55[i] = inverse[4][4];
 		}//end circle i
 
 		// boundary viscosity due to no-slip condition -----------------------------对边界的计算，算了边界的黏性力
@@ -2413,7 +2413,7 @@ namespace sph {
 #endif
 		for (int i = 0; i < particles.size(); i++)
 		{
-			particle* ii = particles[i];
+			//particle* ii = particles[i];
 			if (particlesa.btype[i] != sph::BoundaryType::Boundary) continue;//存在一个边界缺失的问题：边界的邻域是不全的，所以算的边界的黏性力其实也不准确
 			const double rho_i = particlesa.rho[i];
 			const double hsml = particlesa.hsml[i];
@@ -2426,7 +2426,7 @@ namespace sph {
 			//--------wMxij-------
 			for (int j = 0; j < particlesa.neibNum[i]; j++)
 			{
-				const particle* jj = ii->neiblist[j];
+				const int jj = particlesa.neiblist[i][j];
 				if (particlesa.bweight[i][j] < 0.000000001) continue;
 				const double xj = particlesa.x[jj];
 				const double yj = particlesa.y[jj];
@@ -2441,8 +2441,8 @@ namespace sph {
 					dx = particlesa.x[jj] - particlesa.x[i] + lengthofx;//xi(1)
 				}
 
-				(ii)->wMxijx[j] = ((ii)->m_11 * dx + (ii)->m_12 * dy) * particlesa.bweight[i][j]; //(ii)->m_12可能等于0
-				(ii)->wMxijy[j] = ((ii)->m_21 * dx + (ii)->m_22 * dy) * particlesa.bweight[i][j];
+				particlesa.wMxijx[i][j] = (particlesa.m_11[i] * dx + particlesa.m_12[i] * dy) * particlesa.bweight[i][j]; //particlesa.m_12[i]可能等于0
+				particlesa.wMxijy[i][j] = (particlesa.m_21[i] * dx + particlesa.m_22[i] * dy) * particlesa.bweight[i][j];
 			}
 			//if (particlesa.btype[i] != sph::BoundaryType::Boundary) continue;
 
@@ -2460,15 +2460,15 @@ namespace sph {
 			double tau21 = 0;
 			double tau22 = 0;
 
-			const double p_i = (ii)->press;
+			const double p_i = particlesa.press[i];
 
 #ifdef OMP_USE
 #pragma omp parallel for schedule (guided) reduction(+:epsilon_2_11,epsilon_2_12,epsilon_2_21,epsilon_2_22)
 #endif
 			for (int j = 0; j < particlesa.neibNum[i]; j++)
 			{
-				const particle* jj = ii->neiblist[j];
-				if ((jj)->btype == sph::BoundaryType::Boundary) continue;
+				const int jj = particlesa.neiblist[i][j];
+				if (particlesa.btype[jj] == sph::BoundaryType::Boundary) continue;
 				if (particlesa.bweight[i][j] < 0.000000001) continue;
 				const double xj = particlesa.x[jj];
 				const double yj = particlesa.y[jj];
@@ -2487,10 +2487,10 @@ namespace sph {
 				const double rho_ij = rho_j - rho_i;
 				const double diffx = rho_ij * dx / r2;
 				const double diffy = rho_ij * dx / r2;
-				//const double dvx = (jj)->vx - ((ii)->bctype == BoundaryConditionType::NoSlip ? (ii)->vx : 0);
-				//const double dvy = (jj)->vy - ((ii)->bctype == BoundaryConditionType::NoSlip ? (ii)->vy : 0);
-				const double dvx = (jj)->vx - (ii)->vx;
-				const double dvy = (jj)->vy - (ii)->vy;
+				//const double dvx = particlesa.vx[jj] - ((ii)->bctype == BoundaryConditionType::NoSlip ? particlesa.vx[i] : 0);
+				//const double dvy = particlesa.vy[jj] - ((ii)->bctype == BoundaryConditionType::NoSlip ? particlesa.vy[i] : 0);
+				const double dvx = particlesa.vx[jj] - particlesa.vx[i];
+				const double dvy = particlesa.vy[jj] - particlesa.vy[i];
 				const double massj = particlesa.mass[jj];
 
 				double epsilon_dot11 = 0;
@@ -2506,35 +2506,35 @@ namespace sph {
 				double temp_ik21 = 0;
 				double temp_ik22 = 0;
 
-				const double A_1 = dvx * (ii)->wMxijx[j] + dvy * (ii)->wMxijy[j];
+				const double A_1 = dvx * particlesa.wMxijx[i][j] + dvy * particlesa.wMxijy[i][j];
 
-				epsilon_2_11 += dvx * (ii)->wMxijx[j] * massj / rho_j;//du/dx
-				epsilon_2_12 += dvx * (ii)->wMxijy[j] * massj / rho_j;//du/dy
-				epsilon_2_21 += dvy * (ii)->wMxijx[j] * massj / rho_j;//dv/dx
-				epsilon_2_22 += dvy * (ii)->wMxijy[j] * massj / rho_j;//dv/dy			
+				epsilon_2_11 += dvx * particlesa.wMxijx[i][j] * massj / rho_j;//du/dx
+				epsilon_2_12 += dvx * particlesa.wMxijy[i][j] * massj / rho_j;//du/dy
+				epsilon_2_21 += dvy * particlesa.wMxijx[i][j] * massj / rho_j;//dv/dx
+				epsilon_2_22 += dvy * particlesa.wMxijy[i][j] * massj / rho_j;//dv/dy			
 			}//end circle j
 
 			 //epsilon_second= -1./3.* epsilon_3;//*��λ����
 
-				//epsilon_temp(11)= epsilon_2(11) * (ii)->m_11 + epsilon_2(12) * (ii)->m_21;
-				//epsilon_temp(12)= epsilon_2(11) * (ii)->m_12 + epsilon_2(12) * (ii)->m_22;
-				//epsilon_temp(21)= epsilon_2(21) * (ii)->m_11 + epsilon_2(22) * (ii)->m_21;
-				//epsilon_temp(22)= epsilon_2(21) * (ii)->m_12 + epsilon_2(22) * (ii)->m_22;
+				//epsilon_temp(11)= epsilon_2(11) * particlesa.m_11[i] + epsilon_2(12) * particlesa.m_21[i];
+				//epsilon_temp(12)= epsilon_2(11) * particlesa.m_12[i] + epsilon_2(12) * particlesa.m_22[i];
+				//epsilon_temp(21)= epsilon_2(21) * particlesa.m_11[i] + epsilon_2(22) * particlesa.m_21[i];
+				//epsilon_temp(22)= epsilon_2(21) * particlesa.m_12[i] + epsilon_2(22) * particlesa.m_22[i];
 
 				//epsilon_dot=0.5*(epsilon_temp+transpose(epsilon_temp))+epsilon_second  !�ܵ�epsilon,����������ȣ�û��epsilon_second
-			/*epsilon_dot11 = epsilon_2_11 * (ii)->m_11 + epsilon_2_12 * (ii)->m_21 - 1. / 3. * epsilon_3;
-			epsilon_dot12 = ((epsilon_2_11 * (ii)->m_12 + epsilon_2_12 * (ii)->m_22) + (epsilon_2_21 * (ii)->m_11 + epsilon_2_22 * (ii)->m_21)) * 0.5;
+			/*epsilon_dot11 = epsilon_2_11 * particlesa.m_11[i] + epsilon_2_12 * particlesa.m_21[i] - 1. / 3. * epsilon_3;
+			epsilon_dot12 = ((epsilon_2_11 * particlesa.m_12[i] + epsilon_2_12 * particlesa.m_22[i]) + (epsilon_2_21 * particlesa.m_11[i] + epsilon_2_22 * particlesa.m_21[i])) * 0.5;
 			epsilon_dot21 = epsilon_dot12;
-			epsilon_dot22 = epsilon_2_21 * (ii)->m_12 + epsilon_2_22 * (ii)->m_22 - 1. / 3. * epsilon_3;*/
+			epsilon_dot22 = epsilon_2_21 * particlesa.m_12[i] + epsilon_2_22 * particlesa.m_22[i] - 1. / 3. * epsilon_3;*/
 			epsilon_dot11 = epsilon_2_11 ;
 			epsilon_dot12 = 0.5*(epsilon_2_12 + epsilon_2_21);
 			epsilon_dot21 = epsilon_dot12;
 			epsilon_dot22 = epsilon_2_22 ;
 			//边界粒子的物理黏性项tau： 比较重要！
-			(ii)->tau11 = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot11;//边界粒子的黏性力
-			(ii)->tau12 = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot12;
-			(ii)->tau21 = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot21;
-			(ii)->tau22 = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot22;
+			particlesa.tau11[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot11;//边界粒子的黏性力
+			particlesa.tau12[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot12;
+			particlesa.tau21[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot21;
+			particlesa.tau22[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot22;
 
 			//double dist = 0;
 			//const double y1 = indiameter;//height
@@ -2556,11 +2556,11 @@ namespace sph {
 
 			const double mut = dp * dp * C_s * C_s * s1ij;
 			//const double kenergy = C_v / C_e * dp * dp * s1ij * s1ij;    //Ksps=K_turb
-			const double kenergy = ((ii)->vx * (ii)->vx + (ii)->vy * (ii)->vy) * 0.5;
-			(ii)->turb11 = 2.0 * mut * dvdx11 * rho_i - 2.0 / 3.0 * kenergy * rho_i;//����tao= ( 2*Vt*Sij-2/3Ksps*�����˺��� )*rho_i// �൱��turbulence(:,:,i)
-			(ii)->turb12 = 2.0 * mut * dvdx12 * rho_i;
-			(ii)->turb21 = 2.0 * mut * dvdx21 * rho_i;
-			(ii)->turb22 = 2.0 * mut * dvdx22 * rho_i - 2.0 / 3.0 * kenergy * rho_i;
+			const double kenergy = (particlesa.vx[i] * particlesa.vx[i] + particlesa.vy[i] * particlesa.vy[i]) * 0.5;
+			particlesa.turb11[i] = 2.0 * mut * dvdx11 * rho_i - 2.0 / 3.0 * kenergy * rho_i;//����tao= ( 2*Vt*Sij-2/3Ksps*�����˺��� )*rho_i// �൱��turbulence(:,:,i)
+			particlesa.turb12[i] = 2.0 * mut * dvdx12 * rho_i;
+			particlesa.turb21[i] = 2.0 * mut * dvdx21 * rho_i;
+			particlesa.turb22[i] = 2.0 * mut * dvdx22 * rho_i - 2.0 / 3.0 * kenergy * rho_i;
 		}//end circle i
 
 		// density 连续性方程
@@ -2576,7 +2576,7 @@ namespace sph {
 #endif
 		for (int i = 0; i < particles.size(); i++)
 		{
-			particle* ii = particles[i];
+			//particle* ii = particles[i];
 			const double xi = particlesa.x[i];
 			const double yi = particlesa.y[i];
 			const double rho_i = particlesa.rho[i];
@@ -2602,7 +2602,7 @@ namespace sph {
 			double tau12 = 0;
 			double tau21 = 0;
 			double tau22 = 0;
-			const double p_i = (ii)->press;
+			const double p_i = particlesa.press[i];
 			//--------turbulence---------
 			double dudx11 = 0;//k
 			double dudx12 = 0;
@@ -2620,7 +2620,7 @@ namespace sph {
 			//--------wMxij-------
 			for (int j = 0; j < particlesa.neibNum[i]; j++)
 			{
-				const particle* jj = ii->neiblist[j];
+				const int jj = particlesa.neiblist[i][j];
 				if (particlesa.bweight[i][j] < 0.000000001) continue;
 				const double xj = particlesa.x[jj];
 				const double yj = particlesa.y[jj];
@@ -2636,8 +2636,8 @@ namespace sph {
 					 dx = particlesa.x[jj] - particlesa.x[i] + lengthofx;;//xi(1)
 				}
 
-				(ii)->wMxijx[j] = ((ii)->m_11 * dx + (ii)->m_12 * dy) * particlesa.bweight[i][j];
-				(ii)->wMxijy[j] = ((ii)->m_21 * dx + (ii)->m_22 * dy) * particlesa.bweight[i][j];
+				particlesa.wMxijx[i][j] = (particlesa.m_11[i] * dx + particlesa.m_12[i] * dy) * particlesa.bweight[i][j];
+				particlesa.wMxijy[i][j] = (particlesa.m_21[i] * dx + particlesa.m_22[i] * dy) * particlesa.bweight[i][j];
 			}
 
 #ifdef OMP_USE
@@ -2645,7 +2645,7 @@ namespace sph {
 #endif
 			for (int j = 0; j < particlesa.neibNum[i]; j++)
 			{
-				const particle* jj = ii->neiblist[j];
+				const int jj = particlesa.neiblist[i][j];
 				if (particlesa.bweight[i][j] < 0.000000001) continue;
 				const double rho_j = particlesa.rho[jj];
 				const double xj = particlesa.x[jj];
@@ -2662,26 +2662,26 @@ namespace sph {
 				}
 				const double r2 = dx * dx + dy * dy;
 				const double rho_ij = rho_j - rho_i;				
-				const double dvx = (jj)->vx - (ii)->vx;
-				const double dvy = (jj)->vy - (ii)->vy;
+				const double dvx = particlesa.vx[jj] - particlesa.vx[i];
+				const double dvy = particlesa.vy[jj] - particlesa.vy[i];
 				const double massj = particlesa.mass[jj];
 				//---------density---------- 
-				//const double vcc_diff = diffx * (ii)->wMxijx[j] + diffy * (ii)->wMxijy[j];//有问题
-				//const double vcc_rho = dvx * (ii)->wMxijx[j] + dvy * (ii)->wMxijy[j];//速度的散度
-				/*const double b1wMq = (ii)->m_11 * dx + (ii)->m_12 * dy + (ii)->m_13 * dx * dx + (ii)->m_14 * dx * dy + (ii)->m_15 * dy * dy;
-				const double b2wMq = (ii)->m_21 * dx + (ii)->m_22 * dy + (ii)->m_23 * dx * dx + (ii)->m_24 * dx * dy + (ii)->m_25 * dy * dy;
+				//const double vcc_diff = diffx * particlesa.wMxijx[i][j] + diffy * particlesa.wMxijy[i][j];//有问题
+				//const double vcc_rho = dvx * particlesa.wMxijx[i][j] + dvy * particlesa.wMxijy[i][j];//速度的散度
+				/*const double b1wMq = particlesa.m_11[i] * dx + particlesa.m_12[i] * dy + (ii)->m_13 * dx * dx + (ii)->m_14 * dx * dy + (ii)->m_15 * dy * dy;
+				const double b2wMq = particlesa.m_21[i] * dx + particlesa.m_22[i] * dy + (ii)->m_23 * dx * dx + (ii)->m_24 * dx * dy + (ii)->m_25 * dy * dy;
 				const double vcc_diff = diffx * b1wMq + diffy * b2wMq;
 				const double vcc_rho = dvx * b1wMq + dvy * b2wMq;*/
 				//const double chi = 0.2;
-				//drhodiff += particlesa.bweight[i][j] * chi * (ii)->c0 * hsml * vcc_diff * massj / rho_j;//密度耗散项the density diffusion term
+				//drhodiff += particlesa.bweight[i][j] * chi * particlesa.c0[i] * hsml * vcc_diff * massj / rho_j;//密度耗散项the density diffusion term
 				//divv += vcc_rho * massj / rho_j;//速度散度
 				//drhodt += - rho_i * vcc_rho * massj / rho_j;//连续性方程已经结束！
 				//--------------------------------temperature---
-				const double kj = sph::Fluid::coefficient_heat((jj)->fltype);
+				const double kj = sph::Fluid::coefficient_heat(particlesa.fltype[jj]);
 				const double kij = 0.5 * (ki + kj);
-				const double tij = (jj)->temperature - (ii)->temperature;				
-				const double vcc_temperature_xx = (ii)->M_31 * dx + (ii)->M_32 * dy + (ii)->M_33 * dx * dx + (ii)->M_34 * dx * dy + (ii)->M_35 * dy * dy;//高阶
-				const double vcc_temperature_yy = (ii)->M_51 * dx + (ii)->M_52 * dy + (ii)->M_53 * dx * dx + (ii)->M_54 * dx * dy + (ii)->M_55 * dy * dy;
+				const double tij = particlesa.temperature[jj] - particlesa.temperature[i];				
+				const double vcc_temperature_xx = particlesa.M_31[i] * dx + particlesa.M_32[i] * dy + particlesa.M_33[i] * dx * dx + particlesa.M_34[i] * dx * dy + particlesa.M_35[i] * dy * dy;//高阶
+				const double vcc_temperature_yy = particlesa.M_51[i] * dx + particlesa.M_52[i] * dy + particlesa.M_53[i] * dx * dx + particlesa.M_54[i] * dx * dy + particlesa.M_55[i] * dy * dy;
 				
 				vcc_temperature_t += 2.0*(vcc_temperature_xx + vcc_temperature_yy) * tij * particlesa.bweight[i][j] * kij * particlesa.mass[jj] / rho_j;//温度的拉普拉斯运算，传热方程已经结束！
 				//----------柯西应力--------   
@@ -2697,13 +2697,13 @@ namespace sph {
 				double temp_ik12 = 0;
 				double temp_ik21 = 0;
 				double temp_ik22 = 0;
-				//const double A_1 = dvx * (ii)->wMxijx[j] + dvy * (ii)->wMxijy[j];
+				//const double A_1 = dvx * particlesa.wMxijx[i][j] + dvy * particlesa.wMxijy[i][j];
 
 				//速度算子：2*2的张量
-				epsilon_2_11 += dvx * (ii)->wMxijx[j] * massj / rho_j;//du/dx
-				epsilon_2_12 += dvx * (ii)->wMxijy[j] * massj / rho_j;//du/dy
-				epsilon_2_21 += dvy * (ii)->wMxijx[j] * massj / rho_j;//dv/dx
-				epsilon_2_22 += dvy * (ii)->wMxijy[j] * massj / rho_j;//dv/dy  				
+				epsilon_2_11 += dvx * particlesa.wMxijx[i][j] * massj / rho_j;//du/dx
+				epsilon_2_12 += dvx * particlesa.wMxijy[i][j] * massj / rho_j;//du/dy
+				epsilon_2_21 += dvy * particlesa.wMxijx[i][j] * massj / rho_j;//dv/dx
+				epsilon_2_22 += dvy * particlesa.wMxijy[i][j] * massj / rho_j;//dv/dy  				
 			}	//end circle j
 			//---速度散度			
 			particlesa.divvel[i] = epsilon_2_11 + epsilon_2_22;//弱可压缩，散度应该不会很大
@@ -2712,30 +2712,30 @@ namespace sph {
 			taoyy = epsilon_2_22 - 1. / 3. * particlesa.divvel[i];
 			epsilon_dot12 = (epsilon_2_12 + epsilon_2_21);
 			epsilon_dot21 = epsilon_dot12;	*/			
-			//(ii)->tau11 = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * taoxx;//taoxx
-			//(ii)->tau12 = sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot12;//taoxy: Viscosity(dv/dx+du/dy)
-			//(ii)->tau21 = (ii)->tau12;//taoyx=taoxy
-			//(ii)->tau22 = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * taoyy;//taoyy
+			//particlesa.tau11[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * taoxx;//taoxx
+			//particlesa.tau12[i] = sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot12;//taoxy: Viscosity(dv/dx+du/dy)
+			//particlesa.tau21[i] = particlesa.tau12[i];//taoyx=taoxy
+			//particlesa.tau22[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * taoyy;//taoyy
 			//---------对于不可压缩，不再需要求粘性力，再求NS方程了。动量方程中只需要速度的拉普拉斯算子，暂时用一阶算法去求
-			//(ii)->tau11 = epsilon_2_11;//这里的tau11代表速度的偏导
-			//(ii)->tau12 = epsilon_2_12;//
-			//(ii)->tau21 = epsilon_2_21;//
-			//(ii)->tau22 = epsilon_2_22;//
+			//particlesa.tau11[i] = epsilon_2_11;//这里的tau11代表速度的偏导
+			//particlesa.tau12[i] = epsilon_2_12;//
+			//particlesa.tau21[i] = epsilon_2_21;//
+			//particlesa.tau22[i] = epsilon_2_22;//
 			// 
 			//-----现求柯西应力：sigema = p + tao
 			//对于不可压缩：黏性切应力 = 2. * sph::Fluid::Viscosity(particlesa.fltype[i])* 应变
 			//应变为:[ du/dx 0.5*(du/dy+dv/dx) 0.5*(du/dy+dv/dx) dv/dy ]
-			(ii)->tau11 = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_2_11;//这里的tau11代表速度的偏导
-			(ii)->tau12 = sph::Fluid::Viscosity(particlesa.fltype[i]) * (epsilon_2_12+ epsilon_2_21);//
-			(ii)->tau21 = (ii)->tau12;//
-			(ii)->tau22 = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_2_22;//
+			particlesa.tau11[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_2_11;//这里的tau11代表速度的偏导
+			particlesa.tau12[i] = sph::Fluid::Viscosity(particlesa.fltype[i]) * (epsilon_2_12+ epsilon_2_21);//
+			particlesa.tau21[i] = particlesa.tau12[i];//
+			particlesa.tau22[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_2_22;//
 			
 			//-----------------------------涡量 W=0.5(dudx-dvdy)    应变率张量（正应力张量）: S=0.5(dudx+dvdy) divvel
 			double vort = 0.5 * (epsilon_2_21 - epsilon_2_12);
-			//(ii)->vort = (epsilon_2_21 - epsilon_2_12);
+			//particlesa.vort[i] = (epsilon_2_21 - epsilon_2_12);
 			//运用Q准则 Q=0.5*(sqrt(W)-sqrt(S))
-			//(ii)->vort =0.5* (vort* vort - (0.5* particlesa.divvel[i])* (0.5 * particlesa.divvel[i]));
-			(ii)->vort = vort;
+			//particlesa.vort[i] =0.5* (vort* vort - (0.5* particlesa.divvel[i])* (0.5 * particlesa.divvel[i]));
+			particlesa.vort[i] = vort;
 			//----------------------------Turbulence----先不管
 			//double dist = 0;
 			//const double y1 = indiameter;//height
@@ -2758,28 +2758,28 @@ namespace sph {
 			const double mut = dp * dp * C_s * C_s * s1ij;
 			//const double kenergy = C_v / C_e * dp * dp * s1ij * s1ij; //Ksps=K_turb
 			//对于k的求法，不同的文献有不同的求法。
-			const double kenergy = ((ii)->vx * (ii)->vx + (ii)->vy * (ii)->vy) * 0.5;
-			(ii)->turb11 = 2.0 * mut * dvdx11 * rho_i - 2.0 / 3.0 * kenergy * rho_i;//����tao= ( 2*Vt*Sij-2/3Ksps*�����˺��� )*rho_i// �൱��turbulence(:,:,i)
-			(ii)->turb12 = 2.0 * mut * dvdx12 * rho_i;
-			(ii)->turb21 = 2.0 * mut * dvdx21 * rho_i;
-			(ii)->turb22 = 2.0 * mut * dvdx22 * rho_i - 2.0 / 3.0 * kenergy * rho_i;
+			const double kenergy = (particlesa.vx[i] * particlesa.vx[i] + particlesa.vy[i] * particlesa.vy[i]) * 0.5;
+			particlesa.turb11[i] = 2.0 * mut * dvdx11 * rho_i - 2.0 / 3.0 * kenergy * rho_i;//����tao= ( 2*Vt*Sij-2/3Ksps*�����˺��� )*rho_i// �൱��turbulence(:,:,i)
+			particlesa.turb12[i] = 2.0 * mut * dvdx12 * rho_i;
+			particlesa.turb21[i] = 2.0 * mut * dvdx21 * rho_i;
+			particlesa.turb22[i] = 2.0 * mut * dvdx22 * rho_i - 2.0 / 3.0 * kenergy * rho_i;
 			//加上耗散函数：
 			const double fai = sph::Fluid::Viscosity(particlesa.fltype[i]) * (2 * epsilon_2_11 * epsilon_2_11 +
 				2 * epsilon_2_22 * epsilon_2_22 + (epsilon_2_12 + epsilon_2_21) * (epsilon_2_12 + epsilon_2_21));
 			//连续性方程，温度方程
-			if ((ii)->ftype != sph::FixType::Fixed) {
-				//(ii)->drho = drhodt + drhodiff;
-				(ii)->drho = -particlesa.rho[i] * particlesa.divvel[i];
+			if (particlesa.ftype[i] != sph::FixType::Fixed) {
+				//particlesa.drho[i] = drhodt + drhodiff;
+				particlesa.drho[i] = -particlesa.rho[i] * particlesa.divvel[i];
 				//double temp_t = vcc_temperature_t / particlesa.rho[i] / ci;
 				//加耗散函数：
-				(ii)->temperature_x = fai;//用来查看值
+				particlesa.temperature_x[i] = fai;//用来查看值
 				double temp_t = (vcc_temperature_t + fai) / particlesa.rho[i] / ci;
 				//if (temp_t == temp_t)
-				(ii)->temperature_t = temp_t;				
+				particlesa.temperature_t[i] = temp_t;				
 			}
 			else {
-				(ii)->temperature_t = 0;
-				(ii)->drho = 0;
+				particlesa.temperature_t[i] = 0;
+				particlesa.drho[i] = 0;
 			}
 		}//end circle i
 		// for fluid particles（包括inlet）       -----动量方程-----
@@ -2793,10 +2793,10 @@ namespace sph {
 			if (particlesa.btype[i] == sph::BoundaryType::Boundary) continue;
 			const double rho_i = particlesa.rho[i];
 			const double hsml = particlesa.hsml[i];
-			const double p_i = (ii)->press;
+			const double p_i = particlesa.press[i];
 			const double xi = particlesa.x[i];
 			const double yi = particlesa.y[i];
-			const double c0 = (ii)->c0;
+			const double c0 = particlesa.c0[i];
 			const double c = (ii)->c;
 			const double massi = particlesa.mass[i];
 			//------对柯西应力求导-------			
@@ -2822,7 +2822,7 @@ namespace sph {
 #endif
 			for (int j = 0; j < particlesa.neibNum[i]; j++)
 			{
-				const particle* jj = ii->neiblist[j];
+				const int jj = particlesa.neiblist[i][j];
 				if (particlesa.bweight[i][j] < 0.000000001) continue;
 
 				const double xj = particlesa.x[jj];
@@ -2843,60 +2843,60 @@ namespace sph {
 				const double rho_j = particlesa.rho[jj];
 				const double massj = particlesa.mass[jj];
 
-				//(ii)->wMxijx[j] = ((ii)->m_11 * dx + (ii)->m_12 * dy) * particlesa.bweight[i][j];
-				//(ii)->wMxijy[j] = ((ii)->m_21 * dx + (ii)->m_22 * dy) * particlesa.bweight[i][j];
+				//particlesa.wMxijx[i][j] = (particlesa.m_11[i] * dx + particlesa.m_12[i] * dy) * particlesa.bweight[i][j];
+				//particlesa.wMxijy[i][j] = (particlesa.m_21[i] * dx + particlesa.m_22[i] * dy) * particlesa.bweight[i][j];
 				
-				const double wMxijxV_iix = (ii)->wMxijx[j] * massj / rho_j;
-				const double wMxijyV_iiy = (ii)->wMxijy[j] * massj / rho_j;
+				const double wMxijxV_iix = particlesa.wMxijx[i][j] * massj / rho_j;
+				const double wMxijyV_iiy = particlesa.wMxijy[i][j] * massj / rho_j;
 				//const double wMxijxV_jjx = (jj)->wMxijx[j] * massj / rho_j;//(jj)->wMxijx[j] 可能错了
 				//const double wMxijyV_jjy = (jj)->wMxijy[j] * massj / rho_j;
-				const double wMxijxV_jjx = ((jj)->m_11 * dx + (jj)->m_12 * dy) * particlesa.bweight[i][j] * massj / rho_j;
-				const double wMxijyV_jjy = ((jj)->m_21 * dx + (jj)->m_22 * dy) * particlesa.bweight[i][j] * massj / rho_j;
+				const double wMxijxV_jjx = (particlesa.m_11[jj] * dx + particlesa.m_12[jj] * dy) * particlesa.bweight[i][j] * massj / rho_j;
+				const double wMxijyV_jjy = (particlesa.m_21[jj] * dx + particlesa.m_22[jj] * dy) * particlesa.bweight[i][j] * massj / rho_j;
 				//-p的梯度
 				/*temp_px += ( p_i - particlesa.press[jj] ) * wMxijxV_iix;
 				temp_py += ( p_i - particlesa.press[jj] ) * wMxijyV_iiy;*/
 				//黏性切应力分量求导
-				//temp_taoxx += ((jj)->tau11 - (ii)->tau11) * wMxijxV_iix;//du/dx：uxx
-				//temp_taoyy += ((jj)->tau22 - (ii)->tau22) * wMxijyV_iiy;//dv/dy：vyy
-				//temp_taoxy += ((jj)->tau12 - (ii)->tau12) * wMxijxV_iix;//du/dy: uyy
-				//temp_taoyx += ((jj)->tau21 - (ii)->tau21) * wMxijyV_iiy;//dv/dx: vxx  
+				//temp_taoxx += (particlesa.tau11[jj] - particlesa.tau11[i]) * wMxijxV_iix;//du/dx：uxx
+				//temp_taoyy += (particlesa.tau22[jj] - particlesa.tau22[i]) * wMxijyV_iiy;//dv/dy：vyy
+				//temp_taoxy += (particlesa.tau12[jj] - particlesa.tau12[i]) * wMxijxV_iix;//du/dy: uyy
+				//temp_taoyx += (particlesa.tau21[jj] - particlesa.tau21[i]) * wMxijyV_iiy;//dv/dx: vxx  
 				// 
 				//---------------现用柯西应力，态来表示动量方程---------------
 				//sigema_j = [ - p+txx txy tyx p+tyy ]
 				//j粒子----------------有边界粒子
-				const double sigema_j11 = -particlesa.press[jj] + (jj)->tau11;//湍流力一样在这里加
-				const double sigema_j12 = (jj)->tau12;
-				const double sigema_j21 = (jj)->tau21;
-				const double sigema_j22 = -particlesa.press[jj] + (jj)->tau22;
+				const double sigema_j11 = -particlesa.press[jj] + particlesa.tau11[jj];//湍流力一样在这里加
+				const double sigema_j12 = particlesa.tau12[jj];
+				const double sigema_j21 = particlesa.tau21[jj];
+				const double sigema_j22 = -particlesa.press[jj] + particlesa.tau22[jj];
 				//i粒子
-				const double sigema_i11 = -p_i + (ii)->tau11;
-				const double sigema_i12 = (ii)->tau12;
-				const double sigema_i21 = (ii)->tau21;
-				const double sigema_i22 = -p_i + (ii)->tau22;
+				const double sigema_i11 = -p_i + particlesa.tau11[i];
+				const double sigema_i12 = particlesa.tau12[i];
+				const double sigema_i21 = particlesa.tau21[i];
+				const double sigema_i22 = -p_i + particlesa.tau22[i];
 				temp_sigemax += (sigema_j11 * wMxijxV_jjx + sigema_j12 * wMxijyV_jjy)+ (sigema_i11 * wMxijxV_iix + sigema_j12 * wMxijyV_iiy);
 				temp_sigemay += (sigema_j21 * wMxijxV_jjx + sigema_j22 * wMxijyV_jjy)+ (sigema_i21 * wMxijxV_iix + sigema_j22 * wMxijyV_iiy);
 
 				//-----turbulence-------其实也可以将湍流力放到上面的内力一起去				
-				//const double turb_ij11 = (ii)->turb11 * (ii)->m_11 + (ii)->turb12 * (ii)->m_21 + (jj)->turb11 * (jj)->m_11 + (jj)->turb12 * (jj)->m_21;
-				//const double turb_ij12 = (ii)->turb11 * (ii)->m_12 + (ii)->turb12 * (ii)->m_22 + (jj)->turb11 * (jj)->m_12 + (jj)->turb12 * (jj)->m_22;
-				//const double turb_ij21 = (ii)->turb21 * (ii)->m_11 + (ii)->turb22 * (ii)->m_21 + (jj)->turb21 * (jj)->m_11 + (jj)->turb22 * (jj)->m_21;
-				//const double turb_ij22 = (ii)->turb21 * (ii)->m_12 + (ii)->turb22 * (ii)->m_22 + (jj)->turb21 * (jj)->m_12 + (jj)->turb22 * (jj)->m_22;
+				//const double turb_ij11 = particlesa.turb11[i] * particlesa.m_11[i] + particlesa.turb12[i] * particlesa.m_21[i] + particlesa.turb11[jj] * particlesa.m_11[jj] + particlesa.turb12[jj] * particlesa.m_21[jj];
+				//const double turb_ij12 = particlesa.turb11[i] * particlesa.m_12[i] + particlesa.turb12[i] * particlesa.m_22[i] + particlesa.turb11[jj] * particlesa.m_12[jj] + particlesa.turb12[jj] * particlesa.m_22[jj];
+				//const double turb_ij21 = particlesa.turb21[i] * particlesa.m_11[i] + particlesa.turb22[i] * particlesa.m_21[i] + particlesa.turb21[jj] * particlesa.m_11[jj] + particlesa.turb22[jj] * particlesa.m_21[jj];
+				//const double turb_ij22 = particlesa.turb21[i] * particlesa.m_12[i] + particlesa.turb22[i] * particlesa.m_22[i] + particlesa.turb21[jj] * particlesa.m_12[jj] + particlesa.turb22[jj] * particlesa.m_22[jj];
 
 				//const double t1 = (turb_ij11 * dx + turb_ij12 * dy) * particlesa.bweight[i][j];
 				//const double t2 = (turb_ij21 * dx + turb_ij22 * dy) * particlesa.bweight[i][j];
 
 				//turbx += t1 * massj / rho_j;
 				//turby += t2 * massj / rho_j;//����over
-				turbxx += ((jj)->turb11 - (ii)->turb11) * wMxijxV_iix;
-				turbyy += ((jj)->turb22 - (ii)->turb22) * wMxijyV_iiy;
-				turbxy += ((jj)->turb12 - (ii)->turb12) * wMxijyV_iiy;
-				turbyx += ((jj)->turb21 - (ii)->turb21) * wMxijxV_iix;
+				turbxx += (particlesa.turb11[jj] - particlesa.turb11[i]) * wMxijxV_iix;
+				turbyy += (particlesa.turb22[jj] - particlesa.turb22[i]) * wMxijyV_iiy;
+				turbxy += (particlesa.turb12[jj] - particlesa.turb12[i]) * wMxijyV_iiy;
+				turbyx += (particlesa.turb21[jj] - particlesa.turb21[i]) * wMxijxV_iix;
 				//--------artificial viscosity-------
-				const double dvx = (jj)->vx - (ii)->vx;    //(Vj-Vi)
-				const double dvy = (jj)->vy - (ii)->vy;
+				const double dvx = particlesa.vx[jj] - particlesa.vx[i];    //(Vj-Vi)
+				const double dvy = particlesa.vy[jj] - particlesa.vy[i];
 				double muv = 0;
 				double piv = 0;
-				const double cj = (jj)->c;
+				const double cj = particlesa.c[jj];
 				const double vr = dvx * dx + dvy * dy;     //(Vj-Vi)(Rj-Ri)
 				const double mc = 0.5 * (cj + (ii)->c);
 				const double mrho = 0.5 * (rho_j + particlesa.rho[i]);				
@@ -2908,8 +2908,8 @@ namespace sph {
 					//piv = (0.5 * muv) * muv / mrho;//只有beta项，加速度会一直很大，停不下来，穿透。
 				}
 				//人工黏性项，好像过大
-				avx += - massj * piv * (ii)->wMxijx[j];
-				avy += - massj * piv * (ii)->wMxijy[j];
+				avx += - massj * piv * particlesa.wMxijx[i][j];
+				avy += - massj * piv * particlesa.wMxijy[i][j];
 			}
 			
 			(ii)->fintx = temp_sigemax / rho_i;//不对
@@ -2918,8 +2918,8 @@ namespace sph {
 			(ii)->turby = turbyy + turbyx;
 			(ii)->avx = avx;
 			(ii)->avy = avy;
-			///if (ii->iotype == InoutType::Fluid|| ii->iotype == InoutType::Outlet) 
-			if ((ii)->ftype != sph::FixType::Fixed)//inlet粒子的加速度场为0，只有初始速度。outlet粒子呢？
+			///if (particlesa.iotype[i] == InoutType::Fluid|| particlesa.iotype[i] == InoutType::Outlet) 
+			if (particlesa.ftype[i] != sph::FixType::Fixed)//inlet粒子的加速度场为0，只有初始速度。outlet粒子呢？
 			{
 				//particlesa.ax[i] = (ii)->fintx + avx + (ii)->turbx;
 				//particlesa.ay[i] = (ii)->finty + avy + (ii)->turby;
@@ -2958,17 +2958,17 @@ namespace sph {
 #endif
 			for (int j = 0; j < particlesa.neibNum[i]; j++)
 			{
-				const particle* jj = ii->neiblist[j];
-				//if (particlesa.btype[i] == (jj)->btype) continue;//Buffer粒子也在这里，导致流出边界固壁的压力不正常
-				if ((jj)->ftype == sph::FixType::Fixed) continue;//其他固壁粒子不参与，ghost不参与，buffer参与								
+				const int jj = particlesa.neiblist[i][j];
+				//if (particlesa.btype[i] == particlesa.btype[jj]) continue;//Buffer粒子也在这里，导致流出边界固壁的压力不正常
+				if (particlesa.ftype[jj] == sph::FixType::Fixed) continue;//其他固壁粒子不参与，ghost不参与，buffer参与								
 				vcc += particlesa.bweight[i][j];
-				t_x += (jj)->temperature_x * particlesa.bweight[i][j];
-				t_y += (jj)->temperature_y * particlesa.bweight[i][j];
+				t_x += particlesa.temperature_x[jj] * particlesa.bweight[i][j];
+				t_y += particlesa.temperature_y[jj] * particlesa.bweight[i][j];
 			}
 			t_x = 0;//边界是恒温
 			t_y = vcc > 0.00000001 ? (t_y / vcc) : 0;//最外层边界的t_y比第一层流体粒子的t_y小，所以导致第二层粒子的温度高		
-			(ii)->temperature_x = t_x;
-			(ii)->temperature_y = t_y;
+			particlesa.temperature_x[i] = t_x;
+			particlesa.temperature_y[i] = t_y;
 		}
 		// inlet  目前流入处的温度梯度不对 		
 #ifdef OMP_USE
@@ -2985,16 +2985,16 @@ namespace sph {
 #endif
 			for (int j = 0; j < particlesa.neibNum[i]; j++)
 			{
-				const particle* jj = ii->neiblist[j];
+				const int jj = particlesa.neiblist[i][j];
 				if (particlesa.iotype[jj] == sph::InoutType::Inlet) continue;//其他Inlet粒子不参与								
 				vcc += particlesa.bweight[i][j];
-				t_x += (jj)->temperature_x * particlesa.bweight[i][j];
-				t_y += (jj)->temperature_y * particlesa.bweight[i][j];
+				t_x += particlesa.temperature_x[jj] * particlesa.bweight[i][j];
+				t_y += particlesa.temperature_y[jj] * particlesa.bweight[i][j];
 			}
 			t_x = vcc > 0.00000001 ? t_x / vcc : 0;
 			t_y = vcc > 0.00000001 ? t_y / vcc : 0;				
-			(ii)->temperature_x = t_x;
-			(ii)->temperature_y = t_y;
+			particlesa.temperature_x[i] = t_x;
+			particlesa.temperature_y[i] = t_y;
 		}
 		this->updateGhostInfo();
 		this->Ghost2bufferInfo();
@@ -3027,7 +3027,7 @@ namespace sph {
 #endif
 			for (int j = 0; j < particlesa.neibNum[i]; j++)
 			{
-				const particle* jj = ii->neiblist[j];
+				const int jj = particlesa.neiblist[i][j];
 				if (particlesa.bweight[i][j] < 0.000000001) continue;
 				const double xj = particlesa.x[jj];
 				const double yj = particlesa.y[jj];
@@ -3045,10 +3045,10 @@ namespace sph {
 			m_12 = -k_12 / det;
 			m_21 = -k_21 / det;
 			m_22 = k_11 / det;
-			(ii)->m_11 = m_11;//k矩阵求逆
-			(ii)->m_12 = m_12;
-			(ii)->m_21 = m_21;
-			(ii)->m_22 = m_22;    //shape_inverse(:,:,i),iѭ����һ��
+			particlesa.m_11[i] = m_11;//k矩阵求逆
+			particlesa.m_12[i] = m_12;
+			particlesa.m_21[i] = m_21;
+			particlesa.m_22[i] = m_22;    //shape_inverse(:,:,i),iѭ����һ��
 
 		}
 		
@@ -3070,35 +3070,35 @@ namespace sph {
 //--------wMxij-------
 			for (int j = 0; j < particlesa.neibNum[i]; j++)
 			{
-				const particle* jj = ii->neiblist[j];
+				const int jj = particlesa.neiblist[i][j];
 				if (particlesa.bweight[i][j] < 0.000000001) continue;
 				const double xj = particlesa.x[jj];
 				const double yj = particlesa.y[jj];
 				const double dx = xj - xi;
 				const double dy = yj - yi;
-				(ii)->wMxijx[j] = ((ii)->m_11 * dx + (ii)->m_12 * dy) * particlesa.bweight[i][j];
-				(ii)->wMxijy[j] = ((ii)->m_21 * dx + (ii)->m_22 * dy) * particlesa.bweight[i][j];
+				particlesa.wMxijx[i][j] = (particlesa.m_11[i] * dx + particlesa.m_12[i] * dy) * particlesa.bweight[i][j];
+				particlesa.wMxijy[i][j] = (particlesa.m_21[i] * dx + particlesa.m_22[i] * dy) * particlesa.bweight[i][j];
 			}
 #ifdef OMP_USE
 #pragma omp parallel for schedule (guided) reduction(+:vcc_temperature_x,vcc_temperature_y)
 #endif
 			for (int j = 0; j < particlesa.neibNum[i]; j++)
 			{
-				const particle* jj = ii->neiblist[j];
+				const int jj = particlesa.neiblist[i][j];
 				if (particlesa.bweight[i][j] < 0.000000001) continue;				
 				const double rho_j = particlesa.rho[jj];	
 				const double massj = particlesa.mass[jj];
 				//----temperature-----grad(T)
-				//const double tj = (jj)->temperature;
-				//const double ti = (ii)->temperature;
-				const double tij = (jj)->temperature - (ii)->temperature;
-				vcc_temperature_x += tij * (ii)->wMxijx[j] * massj / rho_j;//流体粒子的温度梯度
-				vcc_temperature_y += tij * (ii)->wMxijy[j] * massj / rho_j;				
+				//const double tj = particlesa.temperature[jj];
+				//const double ti = particlesa.temperature[i];
+				const double tij = particlesa.temperature[jj] - particlesa.temperature[i];
+				vcc_temperature_x += tij * particlesa.wMxijx[i][j] * massj / rho_j;//流体粒子的温度梯度
+				vcc_temperature_y += tij * particlesa.wMxijy[i][j] * massj / rho_j;				
 			}//end circle j			
-			if (ii->iotype == InoutType::Fluid) {
+			if (particlesa.iotype[i] == InoutType::Fluid) {
 
-				(ii)->temperature_x = vcc_temperature_x;
-				(ii)->temperature_y = vcc_temperature_y;
+				particlesa.temperature_x[i] = vcc_temperature_x;
+				particlesa.temperature_y[i] = vcc_temperature_y;
 			}
 
 		}//end circle i		
@@ -3119,24 +3119,24 @@ namespace sph {
 #endif
 			for (int j = 0; j < particlesa.neibNum[i]; j++)
 			{
-				const particle* jj = ii->neiblist[j];
+				const int jj = particlesa.neiblist[i][j];
 				if (particlesa.bweight[i][j] < 0.000000001) continue;	
 				const double rho_j = particlesa.rho[jj];
 				//----temperature-----div(ki*grad(T))
-				const double kj = sph::Fluid::coefficient_heat((jj)->fltype);
+				const double kj = sph::Fluid::coefficient_heat(particlesa.fltype[jj]);
 				const double kij = 0.5 * (ki + kj);				
-				const double temperature_dvx = (jj)->temperature_x - (ii)->temperature_x;//dTxj-dTxi 温度梯度的再运算
-				const double temperature_dvy = (jj)->temperature_y - (ii)->temperature_y;
-				const double vcc_temperature_tt = temperature_dvx * (ii)->wMxijx[j] + temperature_dvy * (ii)->wMxijy[j];
+				const double temperature_dvx = particlesa.temperature_x[jj] - particlesa.temperature_x[i];//dTxj-dTxi 温度梯度的再运算
+				const double temperature_dvy = particlesa.temperature_y[jj] - particlesa.temperature_y[i];
+				const double vcc_temperature_tt = temperature_dvx * particlesa.wMxijx[i][j] + temperature_dvy * particlesa.wMxijy[i][j];
 				vcc_temperature_t += vcc_temperature_tt * kij * particlesa.mass[jj] / rho_j;//温度的拉普拉斯运算
 			}			
-			if (ii->iotype == InoutType::Fluid) {
+			if (particlesa.iotype[i] == InoutType::Fluid) {
 				double temp_t = vcc_temperature_t / particlesa.rho[i] / ci;
 				if (temp_t < 0)temp_t = 0;
-				(ii)->temperature_t = temp_t;
+				particlesa.temperature_t[i] = temp_t;
 			}
 			else {				
-				(ii)->temperature_t = 0;
+				particlesa.temperature_t[i] = 0;
 			}
 		}
 		const std::clock_t end = std::clock();
@@ -3155,9 +3155,9 @@ namespace sph {
 
 			if ((ii)->getBtype() != sph::BoundaryType::Boundary)   
 			{
-				if (particlesa.rho[i] < particlesa.rho[i]_min)
+				if (particlesa.rho[i] < particlesa.rho_min[i])
 				{
-					particlesa.rho[i] = particlesa.rho[i]_min;   
+					particlesa.rho[i] = particlesa.rho_min[i];   
 				}
 			}
 		}
@@ -3170,13 +3170,13 @@ namespace sph {
 		{
 			particle* ii = particles[i];
 			if (particlesa.btype[i] == sph::BoundaryType::Boundary) continue;
-			const double c0 = (ii)->c0;
-			const double rho0 = particlesa.rho[i]0;
+			const double c0 = particlesa.c0[i];
+			const double rho0 = particlesa.rho0[i];
 			const double rhoi = particlesa.rho[i];
 			const double gamma = (ii)->gamma;
 			const double b = c0 * c0 * rho0 / gamma;     //b--B,
 			const double p_back = (ii)->back_p;
-			//			if (ii->iotype == InoutType::Inlet) {
+			//			if (particlesa.iotype[i] == InoutType::Inlet) {
 			//				// interpolation
 			//				double p = 0;
 			//				double pmax = DBL_MIN;
@@ -3186,7 +3186,7 @@ namespace sph {
 			//#endif
 			//				for (int j = 0; j < ii->neiblist.size(); j++)
 			//				{
-			//					const particle* jj = ii->neiblist[j];
+			//					const int jj = particlesa.neiblist[i][j];
 			//					if (particlesa.iotype[i] == particlesa.iotype[jj]) continue;
 			//					const double mass_j = particlesa.mass[jj];
 			//					const double rho_j = particlesa.rho[jj];
@@ -3195,16 +3195,16 @@ namespace sph {
 			//					vcc += particlesa.bweight[i][j];					
 			//				}
 			//				p = vcc > 0.00000001 ? p / vcc : 0;				
-			//				(ii)->vcc = vcc;
-			//				(ii)->press = p; // inlet部分的压力是做的插值求得，按道理应该略大于右边粒子的压力，才会产生推的作用。
-			//				//(ii)->press = 0;			
+			//				particlesa.vcc[i] = vcc;
+			//				particlesa.press[i] = p; // inlet部分的压力是做的插值求得，按道理应该略大于右边粒子的压力，才会产生推的作用。
+			//				//particlesa.press[i] = 0;			
 			//			}
 			//			else
 						//inlet和outlet的压力应该单独设置
-			(ii)->press = b * (pow(rhoi / rho0, gamma) - 1.0) + p_back;      // 流体区
+			particlesa.press[i] = b * (pow(rhoi / rho0, gamma) - 1.0) + p_back;      // 流体区
 
-			if ((ii)->press < p_back)
-				(ii)->press = p_back;
+			if (particlesa.press[i] < p_back)
+				particlesa.press[i] = p_back;
 		}
 		this->updateWeight();
 
@@ -3224,26 +3224,26 @@ namespace sph {
 #endif
 			for (int j = 0; j < particlesa.neibNum[i]; j++)
 			{
-				const particle* jj = ii->neiblist[j];
-				//if (particlesa.btype[i] == (jj)->btype) continue;//Buffer粒子也在这里，导致流出边界固壁的压力不正常
-				if ((jj)->ftype == sph::FixType::Fixed) continue;//其他固壁粒子不参与，ghost不参与，buffer参与
+				const int jj = particlesa.neiblist[i][j];
+				//if (particlesa.btype[i] == particlesa.btype[jj]) continue;//Buffer粒子也在这里，导致流出边界固壁的压力不正常
+				if (particlesa.ftype[jj] == sph::FixType::Fixed) continue;//其他固壁粒子不参与，ghost不参与，buffer参与
 				const double mass_j = particlesa.mass[jj];
 				const double rho_j = particlesa.rho[jj];
 				const double p_k = particlesa.press[jj];
 				p += p_k * particlesa.bweight[i][j];//
 				vcc += particlesa.bweight[i][j];
-				v_x += (jj)->vx * particlesa.bweight[i][j];//需要将速度沿法线分解，还没分
-				v_y += (jj)->vy * particlesa.bweight[i][j];
+				v_x += particlesa.vx[jj] * particlesa.bweight[i][j];//需要将速度沿法线分解，还没分
+				v_y += particlesa.vy[jj] * particlesa.bweight[i][j];
 			}
 			p = vcc > 0.00000001 ? p / vcc : 0;//p有值
 			v_x = vcc > 0.00000001 ? v_x / vcc : 0;//v_x一直为0！待解决
 			v_y = vcc > 0.00000001 ? v_y / vcc : 0;
 			double vx0 = 0;
 			double vy0 = 0;
-			(ii)->vcc = vcc;
-			(ii)->press = p;
-			(ii)->vx = 2.0*vx0 - v_x;//无滑移，要改成径向，切向
-			(ii)->vy = 2.0*vy0 - v_y;
+			particlesa.vcc[i] = vcc;
+			particlesa.press[i] = p;
+			particlesa.vx[i] = 2.0*vx0 - v_x;//无滑移，要改成径向，切向
+			particlesa.vy[i] = 2.0*vy0 - v_y;
 					
 		}
 		//this->updateGhostInfo();
@@ -3278,7 +3278,7 @@ namespace sph {
 #endif
 			for (int j = 0; j < particlesa.neibNum[i]; j++)
 			{
-				const particle* jj = ii->neiblist[j];
+				const int jj = particlesa.neiblist[i][j];
 				if (particlesa.bweight[i][j] < 0.000000001) continue;
 				const double xj = particlesa.x[jj];
 				const double yj = particlesa.y[jj];
@@ -3304,10 +3304,10 @@ namespace sph {
 			m_12 = -k_12 / det;
 			m_21 = -k_21 / det;
 			m_22 = k_11 / det;
-			(ii)->m_11 = m_11;//k矩阵求逆
-			(ii)->m_12 = m_12;
-			(ii)->m_21 = m_21;
-			(ii)->m_22 = m_22;    			
+			particlesa.m_11[i] = m_11;//k矩阵求逆
+			particlesa.m_12[i] = m_12;
+			particlesa.m_21[i] = m_21;
+			particlesa.m_22[i] = m_22;    			
 		}
 
 
@@ -3333,7 +3333,7 @@ namespace sph {
 			//--------wMxij-------
 			for (int j = 0; j < particlesa.neibNum[i]; j++)
 			{
-				const particle* jj = ii->neiblist[j];
+				const int jj = particlesa.neiblist[i][j];
 				if (particlesa.bweight[i][j] < 0.000000001) continue;
 				const double xj = particlesa.x[jj];
 				const double yj = particlesa.y[jj];
@@ -3347,8 +3347,8 @@ namespace sph {
 				{
 					dx = particlesa.x[jj] - particlesa.x[i] + lengthofx;//xi(1)
 				}
-				(ii)->wMxijx[j] = ((ii)->m_11 * dx + (ii)->m_12 * dy) * particlesa.bweight[i][j];
-				(ii)->wMxijy[j] = ((ii)->m_21 * dx + (ii)->m_22 * dy) * particlesa.bweight[i][j];
+				particlesa.wMxijx[i][j] = (particlesa.m_11[i] * dx + particlesa.m_12[i] * dy) * particlesa.bweight[i][j];
+				particlesa.wMxijy[i][j] = (particlesa.m_21[i] * dx + particlesa.m_22[i] * dy) * particlesa.bweight[i][j];
 			}
 			//if (particlesa.btype[i] != sph::BoundaryType::Boundary) continue;
 
@@ -3361,15 +3361,15 @@ namespace sph {
 			double epsilon_dot12 = 0;
 			double epsilon_dot21 = 0;
 			double epsilon_dot22 = 0;			
-			const double p_i = (ii)->press;
+			const double p_i = particlesa.press[i];
 
 #ifdef OMP_USE
 #pragma omp parallel for schedule (guided) reduction(+:epsilon_2_11,epsilon_2_12,epsilon_2_21,epsilon_2_22)
 #endif
 			for (int j = 0; j < particlesa.neibNum[i]; j++)
 			{
-				const particle* jj = ii->neiblist[j];
-				if ((jj)->btype == sph::BoundaryType::Boundary) continue;
+				const int jj = particlesa.neiblist[i][j];
+				if (particlesa.btype[jj] == sph::BoundaryType::Boundary) continue;
 				if (particlesa.bweight[i][j] < 0.000000001) continue;
 				const double xj = particlesa.x[jj];
 				const double yj = particlesa.y[jj];
@@ -3388,23 +3388,23 @@ namespace sph {
 				const double rho_ij = rho_j - rho_i;
 				const double diffx = rho_ij * dx / r2;
 				const double diffy = rho_ij * dx / r2;
-				//const double dvx = (jj)->vx - ((ii)->bctype == BoundaryConditionType::NoSlip ? (ii)->vx : 0);
-				//const double dvy = (jj)->vy - ((ii)->bctype == BoundaryConditionType::NoSlip ? (ii)->vy : 0);
-				const double dvx = (jj)->vx - (ii)->vx;
-				const double dvy = (jj)->vy - (ii)->vy;
+				//const double dvx = particlesa.vx[jj] - ((ii)->bctype == BoundaryConditionType::NoSlip ? particlesa.vx[i] : 0);
+				//const double dvy = particlesa.vy[jj] - ((ii)->bctype == BoundaryConditionType::NoSlip ? particlesa.vy[i] : 0);
+				const double dvx = particlesa.vx[jj] - particlesa.vx[i];
+				const double dvy = particlesa.vy[jj] - particlesa.vy[i];
 				const double massj = particlesa.mass[jj];								
-				epsilon_2_11 += dvx * (ii)->wMxijx[j] * massj / rho_j;//du/dx
-				epsilon_2_12 += dvx * (ii)->wMxijy[j] * massj / rho_j;//du/dy
-				epsilon_2_21 += dvy * (ii)->wMxijx[j] * massj / rho_j;//dv/dx
-				epsilon_2_22 += dvy * (ii)->wMxijy[j] * massj / rho_j;//dv/dy			
+				epsilon_2_11 += dvx * particlesa.wMxijx[i][j] * massj / rho_j;//du/dx
+				epsilon_2_12 += dvx * particlesa.wMxijy[i][j] * massj / rho_j;//du/dy
+				epsilon_2_21 += dvy * particlesa.wMxijx[i][j] * massj / rho_j;//dv/dx
+				epsilon_2_22 += dvy * particlesa.wMxijy[i][j] * massj / rho_j;//dv/dy			
 			}//end circle j
 
 			 //epsilon_second= -1./3.* epsilon_3;//*��λ����
 
-				//epsilon_temp(11)= epsilon_2(11) * (ii)->m_11 + epsilon_2(12) * (ii)->m_21;
-				//epsilon_temp(12)= epsilon_2(11) * (ii)->m_12 + epsilon_2(12) * (ii)->m_22;
-				//epsilon_temp(21)= epsilon_2(21) * (ii)->m_11 + epsilon_2(22) * (ii)->m_21;
-				//epsilon_temp(22)= epsilon_2(21) * (ii)->m_12 + epsilon_2(22) * (ii)->m_22;
+				//epsilon_temp(11)= epsilon_2(11) * particlesa.m_11[i] + epsilon_2(12) * particlesa.m_21[i];
+				//epsilon_temp(12)= epsilon_2(11) * particlesa.m_12[i] + epsilon_2(12) * particlesa.m_22[i];
+				//epsilon_temp(21)= epsilon_2(21) * particlesa.m_11[i] + epsilon_2(22) * particlesa.m_21[i];
+				//epsilon_temp(22)= epsilon_2(21) * particlesa.m_12[i] + epsilon_2(22) * particlesa.m_22[i];
 
 				//epsilon_dot=0.5*(epsilon_temp+transpose(epsilon_temp))+epsilon_second  !�ܵ�epsilon,����������ȣ�û��epsilon_second
 			epsilon_dot11 = epsilon_2_11;
@@ -3412,10 +3412,10 @@ namespace sph {
 			epsilon_dot21 = epsilon_dot12;
 			epsilon_dot22 = epsilon_2_22;
 			//边界粒子的物理黏性项tau： 比较重要！
-			(ii)->tau11 = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot11;//边界粒子的黏性力
-			(ii)->tau12 = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot12;
-			(ii)->tau21 = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot21;
-			(ii)->tau22 = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot22;
+			particlesa.tau11[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot11;//边界粒子的黏性力
+			particlesa.tau12[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot12;
+			particlesa.tau21[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot21;
+			particlesa.tau22[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot22;
 
 			//double dist = 0;
 			//const double y1 = indiameter;//height
@@ -3438,11 +3438,11 @@ namespace sph {
 
 			const double mut = dp * dp * C_s * C_s * s1ij;
 			//const double kenergy = C_v / C_e * dp * dp * s1ij * s1ij;    //Ksps=K_turb
-			const double kenergy = ((ii)->vx * (ii)->vx + (ii)->vy * (ii)->vy) * 0.5;
-			(ii)->turb11 = 2.0 * mut * dvdx11 * rho_i - 2.0 / 3.0 * kenergy * rho_i;//����tao= ( 2*Vt*Sij-2/3Ksps*�����˺��� )*rho_i// �൱��turbulence(:,:,i)
-			(ii)->turb12 = 2.0 * mut * dvdx12 * rho_i;
-			(ii)->turb21 = 2.0 * mut * dvdx21 * rho_i;
-			(ii)->turb22 = 2.0 * mut * dvdx22 * rho_i - 2.0 / 3.0 * kenergy * rho_i;
+			const double kenergy = (particlesa.vx[i] * particlesa.vx[i] + particlesa.vy[i] * particlesa.vy[i]) * 0.5;
+			particlesa.turb11[i] = 2.0 * mut * dvdx11 * rho_i - 2.0 / 3.0 * kenergy * rho_i;//����tao= ( 2*Vt*Sij-2/3Ksps*�����˺��� )*rho_i// �൱��turbulence(:,:,i)
+			particlesa.turb12[i] = 2.0 * mut * dvdx12 * rho_i;
+			particlesa.turb21[i] = 2.0 * mut * dvdx21 * rho_i;
+			particlesa.turb22[i] = 2.0 * mut * dvdx22 * rho_i - 2.0 / 3.0 * kenergy * rho_i;
 		}//end circle i
 
 		// for fluid particles（包括inlet）
@@ -3464,7 +3464,7 @@ namespace sph {
 			double epsilon_2_12 = 0;
 			double epsilon_2_21 = 0;
 			double epsilon_2_22 = 0;     //=dudx11			
-			const double p_i = (ii)->press;
+			const double p_i = particlesa.press[i];
 			
 #ifdef OMP_USE
 #pragma omp parallel for schedule (guided)
@@ -3472,7 +3472,7 @@ namespace sph {
 //--------wMxij-------
 			for (int j = 0; j < particlesa.neibNum[i]; j++)
 			{
-				const particle* jj = ii->neiblist[j];
+				const int jj = particlesa.neiblist[i][j];
 				if (particlesa.bweight[i][j] < 0.000000001) continue;
 				const double xj = particlesa.x[jj];
 				const double yj = particlesa.y[jj];
@@ -3488,8 +3488,8 @@ namespace sph {
 					dx = particlesa.x[jj] - particlesa.x[i] + lengthofx;;//xi(1)
 				}
 
-				(ii)->wMxijx[j] = ((ii)->m_11 * dx + (ii)->m_12 * dy) * particlesa.bweight[i][j];
-				(ii)->wMxijy[j] = ((ii)->m_21 * dx + (ii)->m_22 * dy) * particlesa.bweight[i][j];
+				particlesa.wMxijx[i][j] = (particlesa.m_11[i] * dx + particlesa.m_12[i] * dy) * particlesa.bweight[i][j];
+				particlesa.wMxijy[i][j] = (particlesa.m_21[i] * dx + particlesa.m_22[i] * dy) * particlesa.bweight[i][j];
 			}
 
 
@@ -3499,7 +3499,7 @@ namespace sph {
 #endif
 			for (int j = 0; j < particlesa.neibNum[i]; j++)
 			{
-				const particle* jj = ii->neiblist[j];
+				const int jj = particlesa.neiblist[i][j];
 				if (particlesa.bweight[i][j] < 0.000000001) continue;
 				const double xj = particlesa.x[jj];
 				const double yj = particlesa.y[jj];
@@ -3518,12 +3518,12 @@ namespace sph {
 				const double rho_ij = rho_j - rho_i;
 				const double diffx = rho_ij * dx / r2;
 				const double diffy = rho_ij * dy / r2;
-				const double dvx = (jj)->vx - (ii)->vx;
-				const double dvy = (jj)->vy - (ii)->vy;
+				const double dvx = particlesa.vx[jj] - particlesa.vx[i];
+				const double dvy = particlesa.vy[jj] - particlesa.vy[i];
 				const double massj = particlesa.mass[jj];				
 				//---------density---------- 				
 				//---------repulsive--------F_ab
-				//if (particlesa.fltype[i] != (jj)->fltype) {
+				//if (particlesa.fltype[i] != particlesa.fltype[jj]) {
 				//	const double r = sqrt(r2);
 				//	const double ch = 1.0 - r / hsml;
 				//	const double eta = 2.0 - r / hsml;
@@ -3540,41 +3540,41 @@ namespace sph {
 				//	else {
 				//		f_eta = 0.5 * (2.0 - eta) * (2.0 - eta);
 				//	}
-				//	const double c0 = (ii)->c0;
+				//	const double c0 = particlesa.c0[i];
 				//	//�໥��������ʽ����F_ab��
 				//	replx += -0.01 * c0 * c0 * ch * f_eta * dx / r2 * particlesa.mass[i];
 				//	reply += -0.01 * c0 * c0 * ch * f_eta * dy / r2 * particlesa.mass[i];
 				//}
 				//----------internal force--------								
-				epsilon_2_11 += dvx * (ii)->wMxijx[j] * massj / rho_j;//du/dx
-				epsilon_2_12 += dvx * (ii)->wMxijy[j] * massj / rho_j;//du/dy
-				epsilon_2_21 += dvy * (ii)->wMxijx[j] * massj / rho_j;//dv/dx
-				epsilon_2_22 += dvy * (ii)->wMxijy[j] * massj / rho_j;//dv/dy				
+				epsilon_2_11 += dvx * particlesa.wMxijx[i][j] * massj / rho_j;//du/dx
+				epsilon_2_12 += dvx * particlesa.wMxijy[i][j] * massj / rho_j;//du/dy
+				epsilon_2_21 += dvy * particlesa.wMxijx[i][j] * massj / rho_j;//dv/dx
+				epsilon_2_22 += dvy * particlesa.wMxijy[i][j] * massj / rho_j;//dv/dy				
 			}//end circle j
 			//-----------------------------速度散度			
 			particlesa.divvel[i] = epsilon_2_11 + epsilon_2_22;//弱可压缩，散度应该不会很大		
-			//epsilon_dot11 = epsilon_2_11 * (ii)->m_11 + epsilon_2_12 * (ii)->m_21 - 1. / 3. * epsilon_3;
-			//epsilon_dot12 = ((epsilon_2_11 * (ii)->m_12 + epsilon_2_12 * (ii)->m_22) + (epsilon_2_21 * (ii)->m_11 + epsilon_2_22 * (ii)->m_21)) * 0.5 + 0;
+			//epsilon_dot11 = epsilon_2_11 * particlesa.m_11[i] + epsilon_2_12 * particlesa.m_21[i] - 1. / 3. * epsilon_3;
+			//epsilon_dot12 = ((epsilon_2_11 * particlesa.m_12[i] + epsilon_2_12 * particlesa.m_22[i]) + (epsilon_2_21 * particlesa.m_11[i] + epsilon_2_22 * particlesa.m_21[i])) * 0.5 + 0;
 			//epsilon_dot21 = epsilon_dot12;
-			//epsilon_dot22 = epsilon_2_21 * (ii)->m_12 + epsilon_2_22 * (ii)->m_22 - 1. / 3. * epsilon_3;
+			//epsilon_dot22 = epsilon_2_21 * particlesa.m_12[i] + epsilon_2_22 * particlesa.m_22[i] - 1. / 3. * epsilon_3;
 			////黏性力tau = 2.0* 动力黏度* 剪切应变率张量
-			//(ii)->tau11 = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot11;
-			//(ii)->tau12 = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot12;
-			//(ii)->tau21 = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot21;
-			//(ii)->tau22 = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot22;
+			//particlesa.tau11[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot11;
+			//particlesa.tau12[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot12;
+			//particlesa.tau21[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot21;
+			//particlesa.tau22[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot22;
 			//-----------------------------黏性应力
 			//对于不可压缩：黏性切应力 = 2. * sph::Fluid::Viscosity(particlesa.fltype[i])* 应变
 			//应变为:[ du/dx 0.5*(du/dy+dv/dx) 0.5*(du/dy+dv/dx) dv/dy ]
-			(ii)->tau11 = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_2_11;//这里的tau11代表速度的偏导
-			(ii)->tau12 = sph::Fluid::Viscosity(particlesa.fltype[i]) * (epsilon_2_12 + epsilon_2_21);//
-			(ii)->tau21 = (ii)->tau12;//
-			(ii)->tau22 = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_2_22;//
+			particlesa.tau11[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_2_11;//这里的tau11代表速度的偏导
+			particlesa.tau12[i] = sph::Fluid::Viscosity(particlesa.fltype[i]) * (epsilon_2_12 + epsilon_2_21);//
+			particlesa.tau21[i] = particlesa.tau12[i];//
+			particlesa.tau22[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_2_22;//
 			//-----------------------------涡量 W=0.5(dudy-dvdx)    应变率张量（正应力张量）: S=0.5(dudx+dvdy) divvel
 			double vort = 0.5 * (epsilon_2_12 - epsilon_2_21);
-			//(ii)->vort = (epsilon_2_21 - epsilon_2_12);
+			//particlesa.vort[i] = (epsilon_2_21 - epsilon_2_12);
 			//运用Q准则 Q=0.5*(sqrt(W)-sqrt(S))
-			//(ii)->vort =0.5* (vort* vort - (0.5* particlesa.divvel[i])* (0.5 * particlesa.divvel[i]));
-			(ii)->vort = vort;
+			//particlesa.vort[i] =0.5* (vort* vort - (0.5* particlesa.divvel[i])* (0.5 * particlesa.divvel[i]));
+			particlesa.vort[i] = vort;
 			//-----------------------------湍流应力
 			//double dist = 0;
 			//const double y1 = indiameter;//height
@@ -3597,18 +3597,18 @@ namespace sph {
 			const double mut = dp * dp * C_s * C_s * s1ij;
 			//const double kenergy = C_v / C_e * dp * dp * s1ij * s1ij; //Ksps=K_turb
 			//对于k的求法，不同的文献有不同的求法。
-			const double kenergy = ((ii)->vx * (ii)->vx + (ii)->vy * (ii)->vy) * 0.5;
-			(ii)->turb11 = 2.0 * mut * dvdx11 * rho_i - 2.0 / 3.0 * kenergy * rho_i;//����tao= ( 2*Vt*Sij-2/3Ksps*�����˺��� )*rho_i// �൱��turbulence(:,:,i)
-			(ii)->turb12 = 2.0 * mut * dvdx12 * rho_i;
-			(ii)->turb21 = 2.0 * mut * dvdx21 * rho_i;
-			(ii)->turb22 = 2.0 * mut * dvdx22 * rho_i - 2.0 / 3.0 * kenergy * rho_i;
+			const double kenergy = (particlesa.vx[i] * particlesa.vx[i] + particlesa.vy[i] * particlesa.vy[i]) * 0.5;
+			particlesa.turb11[i] = 2.0 * mut * dvdx11 * rho_i - 2.0 / 3.0 * kenergy * rho_i;//����tao= ( 2*Vt*Sij-2/3Ksps*�����˺��� )*rho_i// �൱��turbulence(:,:,i)
+			particlesa.turb12[i] = 2.0 * mut * dvdx12 * rho_i;
+			particlesa.turb21[i] = 2.0 * mut * dvdx21 * rho_i;
+			particlesa.turb22[i] = 2.0 * mut * dvdx22 * rho_i - 2.0 / 3.0 * kenergy * rho_i;
 			//连续性方程，温度方程
-			if ((ii)->ftype != sph::FixType::Fixed) {
-				//(ii)->drho = drhodt + drhodiff;
-				(ii)->drho = -particlesa.rho[i] * particlesa.divvel[i];	//没有密度耗散项			
+			if (particlesa.ftype[i] != sph::FixType::Fixed) {
+				//particlesa.drho[i] = drhodt + drhodiff;
+				particlesa.drho[i] = -particlesa.rho[i] * particlesa.divvel[i];	//没有密度耗散项			
 			}
 			else {				
-				(ii)->drho = 0;
+				particlesa.drho[i] = 0;
 			}			    
 			//(ii)->replx = replx;                
 			//(ii)->reply = reply;
@@ -3624,10 +3624,10 @@ namespace sph {
 			if (particlesa.btype[i] == sph::BoundaryType::Boundary) continue;
 			const double rho_i = particlesa.rho[i];
 			const double hsml = particlesa.hsml[i];
-			const double p_i = (ii)->press;
+			const double p_i = particlesa.press[i];
 			const double xi = particlesa.x[i];
 			const double yi = particlesa.y[i];
-			const double c0 = (ii)->c0;
+			const double c0 = particlesa.c0[i];
 			const double c = (ii)->c;
 			const double massi = particlesa.mass[i];			
 			//------kexi_force-------			
@@ -3641,7 +3641,7 @@ namespace sph {
 #endif
 			for (int j = 0; j < particlesa.neibNum[i]; j++)
 			{
-				const particle* jj = ii->neiblist[j];
+				const int jj = particlesa.neiblist[i][j];
 				if (particlesa.bweight[i][j] < 0.000000001) continue;
 
 				const double xj = particlesa.x[jj];
@@ -3661,12 +3661,12 @@ namespace sph {
 				const double r2 = dx * dx + dy * dy;
 				const double rho_j = particlesa.rho[jj];
 				const double massj = particlesa.mass[jj];
-				const double wMxijxV_iix = (ii)->wMxijx[j] * massj / rho_j;
-				const double wMxijyV_iiy = (ii)->wMxijy[j] * massj / rho_j;
+				const double wMxijxV_iix = particlesa.wMxijx[i][j] * massj / rho_j;
+				const double wMxijyV_iiy = particlesa.wMxijy[i][j] * massj / rho_j;
 				//const double wMxijxV_jjx = (jj)->wMxijx[j] * massj / rho_j;//(jj)->wMxijx[j] 可能错了
 				//const double wMxijyV_jjy = (jj)->wMxijy[j] * massj / rho_j;
-				const double wMxijxV_jjx = ((jj)->m_11 * dx + (jj)->m_12 * dy) * particlesa.bweight[i][j] * massj / rho_j;
-				const double wMxijyV_jjy = ((jj)->m_21 * dx + (jj)->m_22 * dy) * particlesa.bweight[i][j] * massj / rho_j;
+				const double wMxijxV_jjx = (particlesa.m_11[jj] * dx + particlesa.m_12[jj] * dy) * particlesa.bweight[i][j] * massj / rho_j;
+				const double wMxijyV_jjy = (particlesa.m_21[jj] * dx + particlesa.m_22[jj] * dy) * particlesa.bweight[i][j] * massj / rho_j;
 				//-----internal_force-----fintx: 压强项（- 压强梯度/rho） + 物理黏性项（黏度 * 速度的拉普拉斯算子/rho）	
 				//在计算力的时候，与对速度的运算略有不同；计算力的时候采用的是PD中的态的运算思路，				
 				//double temp_ik11 = 0;
@@ -3675,43 +3675,43 @@ namespace sph {
 				//double temp_ik22 = 0;
 				////对于柯西应力F：求和：bweight * (F_I* M_I + F_J* M_J)xij* V_J
 				////其中，柯西应力包括有：压强项、物理黏性项、湍流黏性项
-				//temp_ik11 = (-p_i + (ii)->tau11) * (ii)->m_11 + (ii)->tau12 * (ii)->m_21 + (-particlesa.press[jj] + (jj)->tau11) * (jj)->m_11 + (jj)->tau12 * (jj)->m_21;
-				//temp_ik12 = (-p_i + (ii)->tau11) * (ii)->m_12 + (ii)->tau12 * (ii)->m_22 + (-particlesa.press[jj] + (jj)->tau11) * (jj)->m_12 + (jj)->tau12 * (jj)->m_22;
-				//temp_ik21 = (ii)->tau21 * (ii)->m_11 + (-p_i + (ii)->tau22) * (ii)->m_21 + (jj)->tau21 * (jj)->m_11 + (-particlesa.press[jj] + (jj)->tau22) * (jj)->m_21;
-				//temp_ik22 = (ii)->tau21 * (ii)->m_12 + (-p_i + (ii)->tau22) * (ii)->m_22 + (jj)->tau21 * (jj)->m_12 + (-particlesa.press[jj] + (jj)->tau22) * (jj)->m_22;
+				//temp_ik11 = (-p_i + particlesa.tau11[i]) * particlesa.m_11[i] + particlesa.tau12[i] * particlesa.m_21[i] + (-particlesa.press[jj] + particlesa.tau11[jj]) * particlesa.m_11[jj] + particlesa.tau12[jj] * particlesa.m_21[jj];
+				//temp_ik12 = (-p_i + particlesa.tau11[i]) * particlesa.m_12[i] + particlesa.tau12[i] * particlesa.m_22[i] + (-particlesa.press[jj] + particlesa.tau11[jj]) * particlesa.m_12[jj] + particlesa.tau12[jj] * particlesa.m_22[jj];
+				//temp_ik21 = particlesa.tau21[i] * particlesa.m_11[i] + (-p_i + particlesa.tau22[i]) * particlesa.m_21[i] + particlesa.tau21[jj] * particlesa.m_11[jj] + (-particlesa.press[jj] + particlesa.tau22[jj]) * particlesa.m_21[jj];
+				//temp_ik22 = particlesa.tau21[i] * particlesa.m_12[i] + (-p_i + particlesa.tau22[i]) * particlesa.m_22[i] + particlesa.tau21[jj] * particlesa.m_12[jj] + (-particlesa.press[jj] + particlesa.tau22[jj]) * particlesa.m_22[jj];
 				//fintx += particlesa.bweight[i][j] * (temp_ik11 * dx + temp_ik12 * dy) * particlesa.mass[jj] / rho_j / rho_i;
 				//finty += particlesa.bweight[i][j] * (temp_ik21 * dx + temp_ik22 * dy) * particlesa.mass[jj] / rho_j / rho_i;
 				
 				//---------------现用柯西应力，态来表示动量方程---------------
 				//sigema_j = [ - p+txx txy tyx p+tyy ]
 				//j粒子----------------有边界粒子
-				//const double sigema_j11 = -particlesa.press[jj] + (jj)->tau11;//湍流力一样在这里加
-				//const double sigema_j12 = (jj)->tau12;
-				//const double sigema_j21 = (jj)->tau21;
-				//const double sigema_j22 = -particlesa.press[jj] + (jj)->tau22;
-				const double sigema_j11 = -particlesa.press[jj] + (jj)->tau11+(jj)->turb11;//加上湍流应力
-				const double sigema_j12 = (jj)->tau12+ (jj)->turb12;//(jj)->tau12=(jj)->tau21;(jj)->turb12=(jj)->turb21
-				const double sigema_j21 = (jj)->tau21+ (jj)->turb21;
-				const double sigema_j22 = -particlesa.press[jj] + (jj)->tau22+ (jj)->turb22;
+				//const double sigema_j11 = -particlesa.press[jj] + particlesa.tau11[jj];//湍流力一样在这里加
+				//const double sigema_j12 = particlesa.tau12[jj];
+				//const double sigema_j21 = particlesa.tau21[jj];
+				//const double sigema_j22 = -particlesa.press[jj] + particlesa.tau22[jj];
+				const double sigema_j11 = -particlesa.press[jj] + particlesa.tau11[jj]+particlesa.turb11[jj];//加上湍流应力
+				const double sigema_j12 = particlesa.tau12[jj]+ particlesa.turb12[jj];//particlesa.tau12[jj]=particlesa.tau21[jj];particlesa.turb12[jj]=particlesa.turb21[jj]
+				const double sigema_j21 = particlesa.tau21[jj]+ particlesa.turb21[jj];
+				const double sigema_j22 = -particlesa.press[jj] + particlesa.tau22[jj]+ particlesa.turb22[jj];
 				//i粒子
-				/*const double sigema_i11 = -p_i + (ii)->tau11;
-				const double sigema_i12 = (ii)->tau12;
-				const double sigema_i21 = (ii)->tau21;
-				const double sigema_i22 = -p_i + (ii)->tau22;*/
-				const double sigema_i11 = -p_i + (ii)->tau11 + (ii)->turb11;
-				const double sigema_i12 = (ii)->tau12 + (ii)->turb12;
-				const double sigema_i21 = (ii)->tau21 + (ii)->turb21;
-				const double sigema_i22 = -p_i + (ii)->tau22 + (ii)->turb22;
+				/*const double sigema_i11 = -p_i + particlesa.tau11[i];
+				const double sigema_i12 = particlesa.tau12[i];
+				const double sigema_i21 = particlesa.tau21[i];
+				const double sigema_i22 = -p_i + particlesa.tau22[i];*/
+				const double sigema_i11 = -p_i + particlesa.tau11[i] + particlesa.turb11[i];
+				const double sigema_i12 = particlesa.tau12[i] + particlesa.turb12[i];
+				const double sigema_i21 = particlesa.tau21[i] + particlesa.turb21[i];
+				const double sigema_i22 = -p_i + particlesa.tau22[i] + particlesa.turb22[i];
 				temp_sigemax += (sigema_j11 * wMxijxV_jjx + sigema_j12 * wMxijyV_jjy) + (sigema_i11 * wMxijxV_iix + sigema_j12 * wMxijyV_iiy);
 				temp_sigemay += (sigema_j21 * wMxijxV_jjx + sigema_j22 * wMxijyV_jjy) + (sigema_i21 * wMxijxV_iix + sigema_j22 * wMxijyV_iiy);
 				//-----turbulence-------湍流力加到柯西应力中去了
 				
 				//--------artificial viscosity-------
-				const double dvx = (jj)->vx - (ii)->vx;    //(Vj-Vi)
-				const double dvy = (jj)->vy - (ii)->vy;
+				const double dvx = particlesa.vx[jj] - particlesa.vx[i];    //(Vj-Vi)
+				const double dvy = particlesa.vy[jj] - particlesa.vy[i];
 				double muv = 0;
 				double piv = 0;
-				const double cj = (jj)->c;
+				const double cj = particlesa.c[jj];
 				const double vr = dvx * dx + dvy * dy;     //(Vj-Vi)(Rj-Ri)
 				const double mc = 0.5 * (cj + (ii)->c);
 				const double mrho = 0.5 * (rho_j + particlesa.rho[i]);				
@@ -3721,8 +3721,8 @@ namespace sph {
 					piv = (0.5 * muv - 1.0 * mc) * muv / mrho;
 					//piv = (0.5 * muv) * muv / mrho;//只有beta项，加速度会一直很大，停不下来，穿透。
 				}
-				avx += -massj * piv * (ii)->wMxijx[j];
-				avy += -massj * piv * (ii)->wMxijy[j];
+				avx += -massj * piv * particlesa.wMxijx[i][j];
+				avy += -massj * piv * particlesa.wMxijy[i][j];
 			}
 			
 			(ii)->fintx = temp_sigemax / rho_i;                
@@ -3732,7 +3732,7 @@ namespace sph {
 			(ii)->avx = avx;
 			(ii)->avy = avy;
 			//(ii)->avy = 0;							
-			if ((ii)->ftype != sph::FixType::Fixed)//inlet粒子的加速度场为0，只有初始速度。outlet粒子呢？
+			if (particlesa.ftype[i] != sph::FixType::Fixed)//inlet粒子的加速度场为0，只有初始速度。outlet粒子呢？
 			{				
 				particlesa.ax[i] = (ii)->fintx + avx;
 				particlesa.ay[i] = (ii)->finty + avy;
@@ -3777,8 +3777,8 @@ namespace sph {
 		{
 			particle* ii = particles[i];
 			if (particlesa.btype[i] == sph::BoundaryType::Boundary) continue;
-			(ii)->vx = vel * cos(angle);
-			(ii)->vy = vel * sin(angle);
+			particlesa.vx[i] = vel * cos(angle);
+			particlesa.vy[i] = vel * sin(angle);
 		}
 	}
 
@@ -3797,16 +3797,16 @@ namespace sph {
 			if (particlesa.btype[i] == sph::BoundaryType::Boundary) continue;
 			if (particlesa.x[i] < 0) {
 				//将速度施加为定速条件
-				//(ii)->ftype = sph::FixType::Moving;				
-				//(ii)->vx = vel * cos(angle)*(1- particlesa.y[i] * particlesa.y[i] /RR);//vel*(1-rr/RR)
-				//(ii)->vy = vel * sin(angle) * (1 - particlesa.y[i] * particlesa.y[i] / RR);
-				(ii)->vx = vel * cos(angle);
-				(ii)->vy = vel * sin(angle);
+				//particlesa.ftype[i] = sph::FixType::Moving;				
+				//particlesa.vx[i] = vel * cos(angle)*(1- particlesa.y[i] * particlesa.y[i] /RR);//vel*(1-rr/RR)
+				//particlesa.vy[i] = vel * sin(angle) * (1 - particlesa.y[i] * particlesa.y[i] / RR);
+				particlesa.vx[i] = vel * cos(angle);
+				particlesa.vy[i] = vel * sin(angle);
 				particlesa.iotype[i] = sph::InoutType::Inlet;
 			}
 			else
 			{
-				//(ii)->ftype = sph::FixType::Free;
+				//particlesa.ftype[i] = sph::FixType::Free;
 				particlesa.iotype[i] = sph::InoutType::Fluid;
 			}
 		}
@@ -3839,14 +3839,14 @@ namespace sph {
 			particle* ii = particles[i];
 			if (particlesa.btype[i] == sph::BoundaryType::Boundary) continue;
 			if (particlesa.x[i] < -dp * (int(inlen / dp) - 4.0)) {
-				(ii)->ftype = sph::FixType::Moving;
-				(ii)->vx = vel * cos(angle);
-				(ii)->vy = vel * sin(angle);
+				particlesa.ftype[i] = sph::FixType::Moving;
+				particlesa.vx[i] = vel * cos(angle);
+				particlesa.vy[i] = vel * sin(angle);
 				particlesa.iotype[i] = sph::InoutType::Inlet;
 			}
 			else
 			{
-				(ii)->ftype = sph::FixType::Free;
+				particlesa.ftype[i] = sph::FixType::Free;
 				particlesa.iotype[i] = sph::InoutType::Fluid;
 			}
 		}
@@ -3862,9 +3862,10 @@ namespace sph {
 		ofile << "Variables = \"X\", \"Y\", \"Id\"\n";
 		ofile << "Zone I=" << particles[id - 1]->neiblist.size() + 1 << std::endl;
 		ofile << particles[id - 1]->getX() << '\t' << particles[id - 1]->getY() << '\t' << id << std::endl;
-		for (auto i = particles[id - 1]->neiblist.begin(); i != particles[id - 1]->neiblist.end(); i++)
+		//for (auto i = particles[id - 1]->neiblist.begin(); i != particles[id - 1]->neiblist.end(); i++)
+		for (int i = 0; i < particlesa.neibNum[id - 1]; i++)
 		{
-			ofile << (*i)->getX() << '\t' << (*i)->getY() << '\t' << (*i)->getIdx() << std::endl;
+			ofile << particlesa.getX(particlesa.neiblist[id-1][i]) << '\t' << particlesa.getY(particlesa.neiblist[id - 1][i]) << '\t' << particlesa.getIdx(particlesa.neiblist[id - 1][i]) << std::endl;
 		}
 		ofile.close();
 	}
@@ -3901,16 +3902,16 @@ namespace sph {
 #pragma omp parallel for schedule (guided)
 #endif
 		for (int i = 0; i < particles.size(); i++) {
-			particle* ii = particles[i];
+			//particle* ii = particles[i];
 			double xi = particlesa.getX(i);
 
 			if (xi < 0) {
-				(ii)->setIotype(InoutType::Inlet);
+				particlesa.setIotype(InoutType::Inlet,i);
 				//ii->temperature = temperature_min;
 			}
 			else if(xi > 0&& xi < outletBcx)
 			{
-				(ii)->setIotype(InoutType::Fluid);
+				particlesa.setIotype(InoutType::Fluid,i);
 			}
 			
 		}								
@@ -3927,17 +3928,17 @@ namespace sph {
 #endif
 		for (int i = 0; i < particles.size(); i++)
 		{
-			particle* ii = particles[i];
+			//particle* ii = particles[i];
 			//if (ii->btype == sph::BoundaryType::Boundary) continue;
-			double xi = ii->x;
+			double xi = particlesa.x[i];
 			if (xi > outletBcx) {
 				//ii->btype = BoundaryType::Boundary;
-				ii->iotype = InoutType::Outlet;
+				particlesa.iotype[i] = InoutType::Outlet;
 				/*std::cerr << std::endl << "outletBcx  " << outletBcx  << std::endl;
 				std::cerr << std::endl << "outletBcx + 3.001 * dp " << outletBcx + 3.001 * dp << std::endl;*/
 				if (xi > outletBcxEdge) {
-					ii->x = xi - lengthofx;
-					ii->iotype = InoutType::Inlet;
+					particlesa.x[i] = xi - lengthofx;
+					particlesa.iotype[i] = InoutType::Inlet;
 					//ii->temperature = temperature_min;
 				}
 			}
@@ -3960,7 +3961,7 @@ namespace sph {
 		{
 			particle* ii = buffer[i];
 			particle* jj = buffer2ghost[ii];
-			const double px = ii->x;
+			const double px = particlesa.x[i];
 			const double py = ii->y;
 			const int udx = outletd == Direction::Left ? -1 : outletd == Direction::Right ? 1 : 0;
 			const int udy = 0;
@@ -3984,7 +3985,7 @@ namespace sph {
 			const double rho0 = ii->rho0;
 			const double b = c0 * c0 * rho0 / gamma;
 			const double yi = ii->y;
-			const double xi = ii->x;
+			const double xi = particlesa.x[i];
 			double p = 0, vcc = 0, vx = 0, vy = 0, ax=0;
 			double vcc1 = 0, t = 0, t_x = 0, t_y = 0;
 			int vcc2 = 0;
@@ -3997,16 +3998,16 @@ namespace sph {
 #endif
 			for (int j = 0; j < particlesa.neibNum[i]; j++)
 			{
-				const particle* jj = ii->neiblist[j];
-				//if (particlesa.btype[i] == (jj)->btype) continue;
-				//if ((jj)->btype == sph::BoundaryType::Boundary) continue;//排除边界粒子
+				const int jj = particlesa.neiblist[i][j];
+				//if (particlesa.btype[i] == particlesa.btype[jj]) continue;
+				//if (particlesa.btype[jj] == sph::BoundaryType::Boundary) continue;//排除边界粒子
 				if (particlesa.iotype[jj] == sph::InoutType::Ghost) continue;//在建近邻时，ghost邻域中不会有ghost粒子
 				const double mass_j = particlesa.mass[jj];
 				const double rho_j = particlesa.rho[jj];
 				const double p_k = particlesa.press[jj];
 				p += p_k * particlesa.bweight[i][j] * mass_j / rho_j;
-				vx += (jj)->vx * particlesa.bweight[i][j] * mass_j / rho_j;//同温度，不同的y，粒子的速度也不同。
-				vy += (jj)->vy * particlesa.bweight[i][j] * mass_j / rho_j;
+				vx += particlesa.vx[jj] * particlesa.bweight[i][j] * mass_j / rho_j;//同温度，不同的y，粒子的速度也不同。
+				vy += particlesa.vy[jj] * particlesa.bweight[i][j] * mass_j / rho_j;
 				vcc += particlesa.bweight[i][j] * mass_j / rho_j;
 				//ax += (jj)->ax * particlesa.bweight[i][j] * mass_j / rho_j;
 				//double detay = abs(jj->y - yi) / dp;//判断是否属于同一个y
@@ -4014,21 +4015,21 @@ namespace sph {
 				//{
 				//	vcc1 += particlesa.bweight[i][j] * mass_j / rho_j;
 				//	vcc2++;
-				//	//t += (jj)->temperature * particlesa.bweight[i][j] * mass_j / rho_j;
-				//	t += (jj)->temperature;
-				//	t_x += (jj)->temperature_x * particlesa.bweight[i][j] * mass_j / rho_j;
-				//	t_y += (jj)->temperature_y * particlesa.bweight[i][j] * mass_j / rho_j;
+				//	//t += particlesa.temperature[jj] * particlesa.bweight[i][j] * mass_j / rho_j;
+				//	t += particlesa.temperature[jj];
+				//	t_x += particlesa.temperature_x[jj] * particlesa.bweight[i][j] * mass_j / rho_j;
+				//	t_y += particlesa.temperature_y[jj] * particlesa.bweight[i][j] * mass_j / rho_j;
 				//}
-				//t += (jj)->temperature * particlesa.bweight[i][j] * mass_j / rho_j;
-				//t_x += (jj)->temperature_x * particlesa.bweight[i][j] * mass_j / rho_j;
-				//t_y += (jj)->temperature_y * particlesa.bweight[i][j] * mass_j / rho_j;//错的，靠近边界处的不同y粒子的温度梯度区别很大
+				//t += particlesa.temperature[jj] * particlesa.bweight[i][j] * mass_j / rho_j;
+				//t_x += particlesa.temperature_x[jj] * particlesa.bweight[i][j] * mass_j / rho_j;
+				//t_y += particlesa.temperature_y[jj] * particlesa.bweight[i][j] * mass_j / rho_j;//错的，靠近边界处的不同y粒子的温度梯度区别很大
 				//double dist = (jj->y - yi)* (jj->y - yi)+ (jj->x - xi)* (jj->x - xi);
 				////double distmin = 100;
 				////distmin = distmin < dist ? distmin : dist;//考虑边界温度的时候加上
 				//if (distmin > dist) {
-				//	t = (jj)->temperature;
-				//	t_x = (jj)->temperature_x;
-				//	t_y = (jj)->temperature_y;
+				//	t = particlesa.temperature[jj];
+				//	t_x = particlesa.temperature_x[jj];
+				//	t_y = particlesa.temperature_y[jj];
 				//	distmin = dist;
 				//}
 			}
@@ -4043,49 +4044,49 @@ namespace sph {
 			//t_x = vcc1 > vcc0 ? t_x / vcc1 : 0;
 			//t_y = vcc1 > vcc0 ? t_y / vcc1 : 0;
 			if (pmin > p) pmin = p;
-			(ii)->vcc = vcc;
+			particlesa.vcc[i] = vcc;
 			//压力的修改，如何修改使得buffer的压力是递减的
-			(ii)->press = p;
-			//(ii)->press = 0; 
+			particlesa.press[i] = p;
+			//particlesa.press[i] = 0; 
 			particlesa.ax[i] = 0;
 			particlesa.ay[i] = 0;
-			(ii)->vx = vx;
-			(ii)->vy = vy;
+			particlesa.vx[i] = vx;
+			particlesa.vy[i] = vy;
 			//particlesa.rho[i] = (p - (ii)->back_p) / c0 / c0 + rho0;	
 			particlesa.rho[i] = pow(p / b + 1.0, 1 / 7.0) * rho0;//状态方程来的，错了吧，这是gamma=1计算得到的
 			(ii)->c = sqrt(b * (p + gamma) / ii->rho);
-			(ii)->temperature = t;//如果不传温度，那么Buffer粒子的温度将一直不变，即为流体粒子变为Buffer粒子时的温度，感觉也可以。
-			(ii)->temperature_x = t_x;
-			(ii)->temperature_y = t_y;
+			particlesa.temperature[i] = t;//如果不传温度，那么Buffer粒子的温度将一直不变，即为流体粒子变为Buffer粒子时的温度，感觉也可以。
+			particlesa.temperature_x[i] = t_x;
+			particlesa.temperature_y[i] = t_y;
 //#ifdef OMP_USE
 //#pragma omp parallel for schedule (guided) reduction(+:t,t_x,t_y,vcc1)
 //#endif
 //			for (int j = 0; j < particlesa.neibNum[i]; j++)
 //			{
-//				const particle* jj = ii->neiblist[j];
-//				//if (particlesa.btype[i] == (jj)->btype) continue;
-//				//if ((jj)->btype == sph::BoundaryType::Boundary) continue;//排除边界粒子
+//				const int jj = particlesa.neiblist[i][j];
+//				//if (particlesa.btype[i] == particlesa.btype[jj]) continue;
+//				//if (particlesa.btype[jj] == sph::BoundaryType::Boundary) continue;//排除边界粒子
 //				if (particlesa.iotype[jj] == sph::InoutType::Ghost) continue;//在建近邻时，ghost邻域中不会有ghost粒子
 //				double detay = abs(jj->y - yi)/dp;
 //				if (detay>0.3) continue;
 //				const double mass_j = particlesa.mass[jj];
 //				const double rho_j = particlesa.rho[jj];				
 //				vcc1 += particlesa.bweight[i][j] * mass_j / rho_j;				
-//				t += (jj)->temperature * particlesa.bweight[i][j] * mass_j / rho_j;
-//				t_x += (jj)->temperature_x * particlesa.bweight[i][j] * mass_j / rho_j;
-//				t_y += (jj)->temperature_y * particlesa.bweight[i][j] * mass_j / rho_j;//错的，靠近边界处的不同y粒子的温度梯度区别很大
+//				t += particlesa.temperature[jj] * particlesa.bweight[i][j] * mass_j / rho_j;
+//				t_x += particlesa.temperature_x[jj] * particlesa.bweight[i][j] * mass_j / rho_j;
+//				t_y += particlesa.temperature_y[jj] * particlesa.bweight[i][j] * mass_j / rho_j;//错的，靠近边界处的不同y粒子的温度梯度区别很大
 //			}						
 //			t = t > 0.00000001 ? t / vcc1 : 0;
 //			t_x = vcc1 > 0.00000001 ? t_x / vcc1 : 0;
 //			t_y = vcc1 > 0.00000001 ? t_y / vcc1 : 0;
-//			(ii)->temperature = t;//如果不传温度，那么Buffer粒子的温度将一直不变，即为流体粒子变为Buffer粒子时的温度，感觉也可以。
-//			(ii)->temperature_x = t_x;
-//			(ii)->temperature_y = t_y;			
+//			particlesa.temperature[i] = t;//如果不传温度，那么Buffer粒子的温度将一直不变，即为流体粒子变为Buffer粒子时的温度，感觉也可以。
+//			particlesa.temperature_x[i] = t_x;
+//			particlesa.temperature_y[i] = t_y;			
 		}
 		//for (int i = 0; i < ghosts.size(); i++)//流出边界设为最小压力
 		//{
 		//	particle* ii = ghosts[i];
-		//	(ii)->press = pmin;
+		//	particlesa.press[i] = pmin;
 		//}
 	}
 
@@ -4096,17 +4097,17 @@ namespace sph {
 		for (int i = 0; i < buffer.size(); i++)
 		{
 			particle* ii = buffer[i];
-			(ii)->half_x = particlesa.x[i];
-			(ii)->half_vx = (ii)->vx;
-			(ii)->half_temperature = (ii)->temperature;
-			(ii)->vx = (ii)->half_vx + particlesa.ax[i] * dt2;
-			particlesa.x[i] = (ii)->half_x + (ii)->vx * dt2;
+			particlesa.half_x[i] = particlesa.x[i];
+			particlesa.half_vx[i] = particlesa.vx[i];
+			particlesa.half_temperature[i] = particlesa.temperature[i];
+			particlesa.vx[i] = particlesa.half_vx[i] + particlesa.ax[i] * dt2;
+			particlesa.x[i] = particlesa.half_x[i] + particlesa.vx[i] * dt2;
 			//温度也更新下
-			(ii)->temperature = (ii)->half_temperature + (ii)->temperature_t * dt2;
-			//ii->x += ii->vx * dt;
+			particlesa.temperature[i] = particlesa.half_temperature[i] + particlesa.temperature_t[i] * dt2;
+			//particlesa.x[i] += ii->vx * dt;
 			ii->y += ii->vy * dt;
 			if (outletd == Direction::Left) {
-				if (ii->x < outletBcxEdge) {//discard
+				if (particlesa.x[i] < outletBcxEdge) {//discard
 					_b = true;
 					particle* jj = buffer2ghost[ii];
 					ghosts.erase(std::remove(ghosts.begin(), ghosts.end(), jj), ghosts.end());
@@ -4117,7 +4118,7 @@ namespace sph {
 					free(ii);
 					buffer[i] = NULL;
 				}
-				else if (ii->x > outletBcx) {//convert to fluid
+				else if (particlesa.x[i] > outletBcx) {//convert to fluid
 					particle* jj = buffer2ghost[ii];
 					ghosts.erase(std::remove(ghosts.begin(), ghosts.end(), jj), ghosts.end());
 					ghost2buffer.erase(jj);
@@ -4129,7 +4130,7 @@ namespace sph {
 					ii->setIotype(InoutType::Fluid);
 					ii->setIdx(idp++);
 					const double ux = outletd == Direction::Left ? -1 : 1;
-					const double x = ii->x + ux * outletlayer;
+					const double x = particlesa.x[i] + ux * outletlayer;
 					const double y = ii->y;
 					const double gux = abs(x - outletBcx);
 					const double gx = outletBcx - ux * gux;
@@ -4165,7 +4166,7 @@ namespace sph {
 				}
 			}
 			else if (outletd == Direction::Right) {
-				if (ii->x > outletBcxEdge) {//discard超出右边界，删除
+				if (particlesa.x[i] > outletBcxEdge) {//discard超出右边界，删除
 					_b = true;
 					particle* jj = buffer2ghost[ii];
 					ghosts.erase(std::remove(ghosts.begin(), ghosts.end(), jj), ghosts.end());
@@ -4176,7 +4177,7 @@ namespace sph {
 					free(ii);
 					buffer[i] = NULL;
 				}
-				else if (ii->x < outletBcx) {//convert to fluid
+				else if (particlesa.x[i] < outletBcx) {//convert to fluid
 					particle* jj = buffer2ghost[ii];
 					ghosts.erase(std::remove(ghosts.begin(), ghosts.end(), jj), ghosts.end());
 					ghost2buffer.erase(jj);
@@ -4188,7 +4189,7 @@ namespace sph {
 					ii->setIotype(InoutType::Fluid);
 					//ii->setIdx(idp++);
 					const double ux = outletd == Direction::Left ? -1 : 1;
-					const double x = ii->x + ux * outletlayer;
+					const double x = particlesa.x[i] + ux * outletlayer;
 					const double y = ii->y;
 					const double gux = abs(x - outletBcx);
 					const double gx = outletBcx - ux * gux;
@@ -4238,8 +4239,8 @@ namespace sph {
 		{
 			particle* ii = particles[i];
 			if (ii->btype == sph::BoundaryType::Boundary) continue;
-			if (ii->iotype == sph::InoutType::Buffer) continue;
-			const double x = ii->x;
+			if (particlesa.iotype[i] == sph::InoutType::Buffer) continue;
+			const double x = particlesa.x[i];
 			const double y = ii->y;
 			const double vx = ii->vx;
 			const double vy = ii->vy;
