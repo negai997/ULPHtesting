@@ -14,7 +14,7 @@ namespace sph {
 
 	const double karman = 0.4;
 
-	enum class BoundaryType    //0ÎªÁ÷ÌåÓò£¬1Îª±ß½çÓò
+	enum class BoundaryType    //0ä¸ºæµä½“åŸŸï¼Œ1ä¸ºè¾¹ç•ŒåŸŸ
 	{
 		Bulk = 0,
 		Boundary = 1
@@ -47,14 +47,14 @@ namespace sph {
 		friend class domain;
 	public:
 		void initialize(std::vector<class particle*> particles,unsigned int idp);
-		//particle(double, double);  //¹¹Ôìº¯Êı
+		//particle(double, double);  //æ„é€ å‡½æ•°
 		//particle(double, double, double, double, double, double, double, double, double, double, double, double, double, double, double);
-		void setvolume(double);   //¸³Öµº¯Êı£¨Ìå»ı£©
+		void setvolume(double);   //èµ‹å€¼å‡½æ•°ï¼ˆä½“ç§¯ï¼‰
 		void setdensity(double);
 		void setInitPressure(double);
 		void setInitSoundSpd(double);
 		void setIdx(unsigned int _id) { idx = _id; };
-		void setVisco(double);    //Õ³¶È
+		void setVisco(double);    //ç²˜åº¦
 		void sethsml(double);
 		void setBtype(BoundaryType);
 		void setFtype(FixType);
@@ -154,10 +154,10 @@ namespace sph {
 		double* mass;
 		double* hsml;//smooth length
 		double* gamma;
-		double* specific_heat;//±ÈÈÈÈİ
-		double* coefficient_heat;//´«ÈÈÏµÊı
+		double* specific_heat;//æ¯”çƒ­å®¹
+		double* coefficient_heat;//ä¼ çƒ­ç³»æ•°
 		double* temperature;
-		double* temperature_t;   //ÎÂ¶È¶ÔÊ±¼äµÄµ¼Êı
+		double* temperature_t;   //æ¸©åº¦å¯¹æ—¶é—´çš„å¯¼æ•°
 		double* temperature_x;
 		double* temperature_y;
 		double* vcc;
@@ -172,11 +172,11 @@ namespace sph {
 		double** dbweighty;
 		double** wMxijx;
 		double** wMxijy;
-		double* m_11;//MµÄÒ»½×Äæ¾ØÕóµÄÔªËØ
+		double* m_11;//Mçš„ä¸€é˜¶é€†çŸ©é˜µçš„å…ƒç´ 
 		double* m_12;
 		double* m_21;
 		double* m_22;
-		double* M_11;//MµÄ¶ş½×Äæ¾ØÕóµÄ²¿·ÖÔªËØ
+		double* M_11;//Mçš„äºŒé˜¶é€†çŸ©é˜µçš„éƒ¨åˆ†å…ƒç´ 
 		double* M_12;
 		double* M_13;
 		double* M_14;
@@ -200,8 +200,8 @@ namespace sph {
 		double* tau12;
 		double* tau21;
 		double* tau22;
-		double* vort;//vorticityÎĞÁ¿
-		double* divvel;//ËÙ¶ÈÉ¢¶È
+		double* vort;//vorticityæ¶¡é‡
+		double* divvel;//é€Ÿåº¦æ•£åº¦
 		//std::vector<double*> bweight;
 		//std::vector<double*> dbweightx;
 		//std::vector<double*> dbweighty;
@@ -260,10 +260,10 @@ namespace sph {
 		double* mass;
 		double* hsml;//smooth length
 		double* gamma;
-		double* specific_heat;//±ÈÈÈÈİ
-		double* coefficient_heat;//´«ÈÈÏµÊı
+		double* specific_heat;//æ¯”çƒ­å®¹
+		double* coefficient_heat;//ä¼ çƒ­ç³»æ•°
 		double* temperature;
-		double* temperature_t;   //ÎÂ¶È¶ÔÊ±¼äµÄµ¼Êı
+		double* temperature_t;   //æ¸©åº¦å¯¹æ—¶é—´çš„å¯¼æ•°
 		double* temperature_x;
 		double* temperature_y;
 		double* vcc;
@@ -278,11 +278,11 @@ namespace sph {
 		double** dbweighty;
 		double** wMxijx;
 		double** wMxijy;
-		double* m_11;//MµÄÒ»½×Äæ¾ØÕóµÄÔªËØ
+		double* m_11;//Mçš„ä¸€é˜¶é€†çŸ©é˜µçš„å…ƒç´ 
 		double* m_12;
 		double* m_21;
 		double* m_22;
-		double* M_11;//MµÄ¶ş½×Äæ¾ØÕóµÄ²¿·ÖÔªËØ
+		double* M_11;//Mçš„äºŒé˜¶é€†çŸ©é˜µçš„éƒ¨åˆ†å…ƒç´ 
 		double* M_12;
 		double* M_13;
 		double* M_14;
@@ -306,8 +306,8 @@ namespace sph {
 		double* tau12;
 		double* tau21;
 		double* tau22;
-		double* vort;//vorticityÎĞÁ¿
-		double* divvel;//ËÙ¶ÈÉ¢¶È
+		double* vort;//vorticityæ¶¡é‡
+		double* divvel;//é€Ÿåº¦æ•£åº¦
 		//std::vector<double*> bweight;
 		//std::vector<double*> dbweightx;
 		//std::vector<double*> dbweighty;
@@ -658,8 +658,8 @@ namespace sph {
 
 			const double p_j = (*i)->getBtype() == BoundaryType::Boundary ? (*i)->getP_back() : (*i)->getPress();
 
-			fintx -= (p_j + this->getPress()) / this->getDensity() * (*i)->getMass() / (*i)->getDensity() * dbweight.getX();//Õâ¸öµØ·½Ò²Òª¸Ä,xi.getX() = dx;
-			//fintx += (ii)->bweight[j] * (temp_ik11 * dx + temp_ik12 * dy) * (jj)->mass / rho_j / rho_i;//ÊÇ²»ÊÇÒªÔÚÉÏÃæ¼ÓÉÏËÄ¸ötemp_ikµÄº¯ÊıÄØ
+			fintx -= (p_j + this->getPress()) / this->getDensity() * (*i)->getMass() / (*i)->getDensity() * dbweight.getX();//è¿™ä¸ªåœ°æ–¹ä¹Ÿè¦æ”¹,xi.getX() = dx;
+			//fintx += (ii)->bweight[j] * (temp_ik11 * dx + temp_ik12 * dy) * particlesa.mass[jj] / rho_j / rho_i;//æ˜¯ä¸æ˜¯è¦åœ¨ä¸Šé¢åŠ ä¸Šå››ä¸ªtemp_ikçš„å‡½æ•°å‘¢
 			finty -= (p_j + this->getPress()) / this->getDensity() * (*i)->getMass() / (*i)->getDensity() * dbweight.getY();
 		}
 	}

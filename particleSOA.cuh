@@ -32,7 +32,7 @@ namespace sph {
 
 	//const double karman = 0.4;
 
-	//enum class BoundaryType    //0ÎªÁ÷ÌåÓò£¬1Îª±ß½çÓò
+	//enum class BoundaryType    //0ä¸ºæµä½“åŸŸï¼Œ1ä¸ºè¾¹ç•ŒåŸŸ
 	//{
 	//	Bulk = 0,
 	//	Boundary = 1
@@ -65,14 +65,14 @@ namespace sph {
 		friend class domain;
 	public:
 		void initialize(std::vector<class particle*> particles, unsigned int idp);
-		//particle(double, double);  //¹¹Ôìº¯Êı
+		//particle(double, double);  //æ„é€ å‡½æ•°
 		//particle(double, double, double, double, double, double, double, double, double, double, double, double, double, double, double);
-		void setvolume(double, unsigned int pid);   //¸³Öµº¯Êı£¨Ìå»ı£©
+		void setvolume(double, unsigned int pid);   //èµ‹å€¼å‡½æ•°ï¼ˆä½“ç§¯ï¼‰
 		void setdensity(double, unsigned int pid);
 		void setInitPressure(double, unsigned int pid);
 		void setInitSoundSpd(double, unsigned int pid);
 		void setIdx(unsigned int _id, unsigned int pid) { idx[pid] = _id; };
-		void setVisco(double, unsigned int pid);    //Õ³¶È
+		void setVisco(double, unsigned int pid);    //ç²˜åº¦
 		void sethsml(double, unsigned int pid);
 		void setBtype(BoundaryType, unsigned int pid);
 		void setFtype(FixType, unsigned int pid);
@@ -130,8 +130,8 @@ namespace sph {
 		void integrationfull(const double, unsigned int pid);
 		void shifting_c(unsigned int pid);
 		void shifting(const double, unsigned int pid);
-		//void clearNeiblist() { neiblist.clear(); };
-		//void add2Neiblist(particle* _p) { neiblist.push_back(_p); neibNum = neiblist.size(); };
+		void clearNeiblist(unsigned int pid) { for (int i = 0; i < MAX_NEIB; i++) { neiblist[pid][i] = 0; neibNum[pid] = 0; } };
+		void add2Neiblist(unsigned int pid, unsigned int i) { neiblist[pid][neibNum[pid]]=i; neibNum[pid]++ ; };
 		void setZeroDisp(unsigned int pid) { ux[pid] = uy[pid] = 0; };
 		//~particle();
 
@@ -172,10 +172,10 @@ namespace sph {
 		double* mass;
 		double* hsml;//smooth length
 		double* gamma;
-		double* specific_heat;//±ÈÈÈÈİ
-		double* coefficient_heat;//´«ÈÈÏµÊı
+		double* specific_heat;//æ¯”çƒ­å®¹
+		double* coefficient_heat;//ä¼ çƒ­ç³»æ•°
 		double* temperature;
-		double* temperature_t;   //ÎÂ¶È¶ÔÊ±¼äµÄµ¼Êı
+		double* temperature_t;   //æ¸©åº¦å¯¹æ—¶é—´çš„å¯¼æ•°
 		double* temperature_x;
 		double* temperature_y;
 		double* vcc;
@@ -190,11 +190,11 @@ namespace sph {
 		double** dbweighty;
 		double** wMxijx;
 		double** wMxijy;
-		double* m_11;//MµÄÒ»½×Äæ¾ØÕóµÄÔªËØ
+		double* m_11;//Mçš„ä¸€é˜¶é€†çŸ©é˜µçš„å…ƒç´ 
 		double* m_12;
 		double* m_21;
 		double* m_22;
-		double* M_11;//MµÄ¶ş½×Äæ¾ØÕóµÄ²¿·ÖÔªËØ
+		double* M_11;//Mçš„äºŒé˜¶é€†çŸ©é˜µçš„éƒ¨åˆ†å…ƒç´ 
 		double* M_12;
 		double* M_13;
 		double* M_14;
@@ -218,8 +218,8 @@ namespace sph {
 		double* tau12;
 		double* tau21;
 		double* tau22;
-		double* vort;//vorticityÎĞÁ¿
-		double* divvel;//ËÙ¶ÈÉ¢¶È
+		double* vort;//vorticityæ¶¡é‡
+		double* divvel;//é€Ÿåº¦æ•£åº¦
 		//std::vector<double*> bweight;
 		//std::vector<double*> dbweightx;
 		//std::vector<double*> dbweighty;
@@ -840,8 +840,8 @@ namespace sph {
 
 			const double p_j = this->getBtype(neiblist[pid][i]) == BoundaryType::Boundary ? this->getP_back(neiblist[pid][i]) : this->getPress(neiblist[pid][i]);
 
-			fintx[pid] -= (p_j + this->getPress(pid)) / this->getDensity(pid) * this->getMass(neiblist[pid][i]) / this->getDensity(neiblist[pid][i]) * dbweight.getX();//Õâ¸öµØ·½Ò²Òª¸Ä,xi.getX() = dx;
-			//fintx += (ii)->bweight[j] * (temp_ik11 * dx + temp_ik12 * dy) * (jj)->mass / rho_j / rho_i;//ÊÇ²»ÊÇÒªÔÚÉÏÃæ¼ÓÉÏËÄ¸ötemp_ikµÄº¯ÊıÄØ
+			fintx[pid] -= (p_j + this->getPress(pid)) / this->getDensity(pid) * this->getMass(neiblist[pid][i]) / this->getDensity(neiblist[pid][i]) * dbweight.getX();//è¿™ä¸ªåœ°æ–¹ä¹Ÿè¦æ”¹,xi.getX() = dx;
+			//fintx += (ii)->bweight[j] * (temp_ik11 * dx + temp_ik12 * dy) * particlesa.mass[jj] / rho_j / rho_i;//æ˜¯ä¸æ˜¯è¦åœ¨ä¸Šé¢åŠ ä¸Šå››ä¸ªtemp_ikçš„å‡½æ•°å‘¢
 			finty[pid] -= (p_j + this->getPress(pid)) / this->getDensity(pid) * this->getMass(neiblist[pid][i]) / this->getDensity(neiblist[pid][i]) * dbweight.getY();
 		}
 	}
