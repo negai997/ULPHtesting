@@ -102,6 +102,27 @@ __global__ void inlet_dev(unsigned int particleNum,double*x, sph::InoutType* iot
 
 }
 
+__global__ void outlet_dev(unsigned int particleNum, double* x, sph::InoutType* iotype, double outletBcx,double outletBcxEdge,double lengthofx) {
+
+	for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < particleNum; i += gridDim.x * blockDim.x)
+	{
+		//particle* ii = particles[i];
+		//if (ii->btype == sph::BoundaryType::Boundary) continue;
+		double xi = x[i];
+		if (xi > outletBcx) {
+			//ii->btype = BoundaryType::Boundary;
+			iotype[i] = sph::InoutType::Outlet;
+			/*std::cerr << std::endl << "outletBcx  " << outletBcx  << std::endl;
+			std::cerr << std::endl << "outletBcx + 3.001 * dp " << outletBcx + 3.001 * dp << std::endl;*/
+			if (xi > outletBcxEdge) {
+				x[i] = xi - lengthofx;
+				iotype[i] = sph::InoutType::Inlet;
+				//ii->temperature = temperature_min;
+			}
+		}
+	}
+}
+
 void getdt_dev0(unsigned int particleNum, double* dtmin, double* divvel, double* hsml, sph::FluidType* fltype, double vmax, double* Ax, double* Ay) {
 
 	getdt_dev<<<32,126>>>(particleNum, dtmin, divvel, hsml, fltype, vmax, Ax, Ay);
@@ -115,5 +136,10 @@ void adjustC0_dev0(double* c0,double c,unsigned int particleNum) {
 
 void inlet_dev0(unsigned int particleNum, double* x, sph::InoutType* iotype, double outletBcx) {
 	inlet_dev << <32, 32 >> > (particleNum, x,  iotype, outletBcx);
+	CHECK(cudaDeviceSynchronize());
+}
+
+void outlet_dev0(unsigned int particleNum, double* x, sph::InoutType* iotype, double outletBcx, double outletBcxEdge, double lengthofx) {
+	outlet_dev << <32, 32 >> > (particleNum, x, iotype, outletBcx, outletBcxEdge, lengthofx);
 	CHECK(cudaDeviceSynchronize());
 }

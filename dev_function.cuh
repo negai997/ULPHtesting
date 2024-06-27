@@ -18,8 +18,12 @@ __global__ void adjustC0_dev(double* c0, double c, unsigned int particleNum);
 
 __global__ void inlet_dev(unsigned int particleNum, double* x, sph::InoutType* iotype, double outletBcx);
 
+__global__ void outlet_dev(unsigned int particleNum, double* x, sph::InoutType* iotype, double outletBcx, double outletBcxEdge, double lengthofx);
+
 void getdt_dev0(unsigned int particleNum, double* dtmin, double* divvel, double* hsml, sph::FluidType* fltype, double vmax, double* Ax, double* Ay);
 
 void adjustC0_dev0(double* c0, double c, unsigned int particleNum);
 
 void inlet_dev0(unsigned int particleNum, double* x, sph::InoutType* iotype, double outletBcx);
+
+void outlet_dev0(unsigned int particleNum, double* x, sph::InoutType* iotype, double outletBcx, double outletBcxEdge, double lengthofx);
