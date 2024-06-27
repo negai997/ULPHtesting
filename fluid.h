@@ -1,13 +1,7 @@
 #pragma once
-
+#include "classes_type.h"
 namespace sph {
 
-	enum class FluidType
-	{
-		Air,
-		Water,
-		Moisture
-	};
 
 	class Fluid
 	{
@@ -20,7 +14,7 @@ namespace sph {
 				return 1.225;
 				break;
 			case sph::FluidType::Water:
-				return 1.0;//密度的大小严重影响粒子的ay
+				return 1.0;//瀵嗗害鐨勫ぇ灏忎弗閲嶅奖鍝嶇矑瀛愮殑ay
 				break;
 			case sph::FluidType::Moisture:
 				//return 1.23;
@@ -69,7 +63,7 @@ namespace sph {
 				return 0.000008928;
 				break;
 			case sph::FluidType::Water:
-				//动力粘度
+				//鍔ㄥ姏绮樺害
 				return 0.001;
 				break;
 			case sph::FluidType::Moisture:
@@ -80,7 +74,7 @@ namespace sph {
 				break;
 			}
 		};
-		static const double specific_heat(FluidType _f) {        //比热容ci
+		static const double specific_heat(FluidType _f) {        //姣旂儹瀹筩i
 			switch (_f)
 			{
 			case sph::FluidType::Air:
@@ -97,7 +91,7 @@ namespace sph {
 				break;
 			}
 		};
-		static const double coefficient_heat(FluidType _f) {     //传热系数ki
+		static const double coefficient_heat(FluidType _f) {     //浼犵儹绯绘暟ki
 			switch (_f)
 			{
 			case sph::FluidType::Air:

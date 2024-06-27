@@ -10,7 +10,6 @@
 #include <iostream>
 #include "particle.h"
 
-
 #define CHECK(call)\
 {\
 	const cudaError_t error = call;\
@@ -22,43 +21,7 @@
 	}\
 }\
 
-
-//constexpr auto MAX_NEIB = 50;
-
 namespace sph {
-	//const double C_s = 0.15;
-	//const double C_v = 0.08;
-	//const double C_e = 1.0;
-
-	//const double karman = 0.4;
-
-	//enum class BoundaryType    //0为流体域，1为边界域
-	//{
-	//	Bulk = 0,
-	//	Boundary = 1
-	//};
-
-	//enum class BoundaryConditionType
-	//{
-	//	FreeSlip = 1,
-	//	NoSlip = 2
-	//};
-
-	//enum class FixType
-	//{
-	//	Free = 0,
-	//	Fixed = 1,
-	//	Moving = 2
-	//};
-
-	//enum class InoutType
-	//{
-	//	Fluid = 0,
-	//	Inlet = 1,
-	//	Outlet = 2,
-	//	Buffer = 3,
-	//	Ghost = 4
-	//};
 
 	class particleSOA
 	{
@@ -246,6 +209,9 @@ namespace sph {
 		cudaMemPrefetchAsync(ax, sizeof(double) * particleNum, deviceId, NULL);
 		cudaMemPrefetchAsync(ay, sizeof(double) * particleNum, deviceId, NULL);
 		cudaMemPrefetchAsync(c0, sizeof(double) * particleNum, deviceId, NULL);
+		cudaMemPrefetchAsync(x, sizeof(double) * particleNum, deviceId, NULL);
+		cudaMemPrefetchAsync(y, sizeof(double) * particleNum, deviceId, NULL);
+		cudaMemPrefetchAsync(iotype, sizeof(InoutType) * particleNum, deviceId, NULL);
 	}
 
 

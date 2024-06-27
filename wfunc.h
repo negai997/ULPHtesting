@@ -12,7 +12,7 @@ namespace sph {
 
 	class wfunc
 	{
-	public:                                    //factor(ii->hsml,2),¸ÄÎªmhsml?
+	public:                                    //factor(ii->hsml,2),æ”¹ä¸ºmhsml?
 		static inline const double factor(double _hsml, int _dim) {
 			return 1.0 / (math::PI * pow(_hsml, _dim)) * (1.0 - exp(-9.0)) / (1.0 - 10.0 * exp(-9.0));
 		}

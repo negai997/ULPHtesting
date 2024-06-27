@@ -3864,24 +3864,8 @@ namespace sph {
 
 	inline bool domain::inlet()//不再需要新增新的粒子，只需要更新粒子的参数
 	{			
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided)
-#endif
-		for (int i = 0; i < particles.size(); i++) {
-			//particle* ii = particles[i];
-			double xi = particlesa.getX(i);
-
-			if (xi < 0) {
-				particlesa.setIotype(InoutType::Inlet,i);
-				//ii->temperature = temperature_min;
-			}
-			else if(xi > 0&& xi < outletBcx)
-			{
-				particlesa.setIotype(InoutType::Fluid,i);
-			}
-			
-		}								
-			return true;
+		inlet_dev0(particleNum(), particlesa.x, particlesa.iotype, outletBcx);
+		return true;
 			//return false;
 		
 	}
@@ -3889,26 +3873,7 @@ namespace sph {
 	inline bool domain::outlet()//
 	{
 		bool _b = false;
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided)
-#endif
-		for (int i = 0; i < particles.size(); i++)
-		{
-			//particle* ii = particles[i];
-			//if (ii->btype == sph::BoundaryType::Boundary) continue;
-			double xi = particlesa.x[i];
-			if (xi > outletBcx) {
-				//ii->btype = BoundaryType::Boundary;
-				particlesa.iotype[i] = InoutType::Outlet;
-				/*std::cerr << std::endl << "outletBcx  " << outletBcx  << std::endl;
-				std::cerr << std::endl << "outletBcx + 3.001 * dp " << outletBcx + 3.001 * dp << std::endl;*/
-				if (xi > outletBcxEdge) {
-					particlesa.x[i] = xi - lengthofx;
-					particlesa.iotype[i] = InoutType::Inlet;
-					//ii->temperature = temperature_min;
-				}
-			}
-		}		
+		outlet_dev0(particleNum(), particlesa.x, particlesa.iotype, outletBcx, outletBcxEdge, lengthofx);
 		return _b;
 	}
 

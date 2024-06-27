@@ -4,8 +4,8 @@
 #include "dev_function.cuh"
 
 //#include "fluid.h"
-#include<math.h>
-#include <stdio.h>
+//#include<math.h>
+//#include <stdio.h>
 
 /*
 
@@ -85,6 +85,23 @@ __global__ void adjustC0_dev(double* c0, double c, unsigned int particleNum) {
 	}
 }
 
+__global__ void inlet_dev(unsigned int particleNum,double*x, sph::InoutType* iotype,double outletBcx) {
+	for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < particleNum; i += gridDim.x * blockDim.x) {
+		double xi = x[i];
+
+		if (xi < 0) {
+			iotype[i]= sph::InoutType::Inlet;
+			//ii->temperature = temperature_min;
+		}
+		else if (xi > 0 && xi < outletBcx)
+		{
+			iotype[i] = sph::InoutType::Fluid;
+		}
+
+	}
+
+}
+
 void getdt_dev0(unsigned int particleNum, double* dtmin, double* divvel, double* hsml, sph::FluidType* fltype, double vmax, double* Ax, double* Ay) {
 
 	getdt_dev<<<32,126>>>(particleNum, dtmin, divvel, hsml, fltype, vmax, Ax, Ay);
@@ -93,5 +110,10 @@ void getdt_dev0(unsigned int particleNum, double* dtmin, double* divvel, double*
 
 void adjustC0_dev0(double* c0,double c,unsigned int particleNum) {
 	adjustC0_dev<<<32,32>>>(c0, c, particleNum);
+	CHECK(cudaDeviceSynchronize());
+}
+
+void inlet_dev0(unsigned int particleNum, double* x, sph::InoutType* iotype, double outletBcx) {
+	inlet_dev << <32, 32 >> > (particleNum, x,  iotype, outletBcx);
 	CHECK(cudaDeviceSynchronize());
 }
