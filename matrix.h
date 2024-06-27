@@ -1,4 +1,6 @@
 #pragma once
+//#include <stdafx.h>
+#include <iostream>
 #include <cmath>
 #include "vector.h"
 
@@ -28,16 +30,16 @@ namespace math {
 		matrix operator+=(const matrix& _m);
 		matrix operator-=(const matrix& _m);
 		const matrix operator=(const matrix& _m);
-		const matrix inverse();//×Ô¼º¼ÓµÄ£¬ºÃÏñÒ²ÓĞÎÊÌâ
+		const matrix inverse();//è‡ªå·±åŠ çš„ï¼Œå¥½åƒä¹Ÿæœ‰é—®é¢˜
 	private:
-		unsigned int slen;//ĞĞ
-		unsigned int slen2;//ÁĞ
-		double* elems;//µ¥ÔªÊı
+		unsigned int slen;//è¡Œ
+		unsigned int slen2;//åˆ—
+		double* elems;//å•å…ƒæ•°
 	};
 
 	matrix::matrix(const unsigned int _l) :slen{ _l }
 	{
-		slen2 = slen;//·½Õó
+		slen2 = slen;//æ–¹é˜µ
 		elems = new double[slen * slen2];
 		this->setZero();
 	}
@@ -48,18 +50,18 @@ namespace math {
 		this->setZero();
 	}
 
-	inline matrix::matrix(const math::matrix& _m)//ÊäÈë_m¾ØÕó
+	inline matrix::matrix(const math::matrix& _m)//è¾“å…¥_mçŸ©é˜µ
 	{
 		slen = _m.getLen();
 		slen2 = _m.getLen2();
 		elems = new double[slen * slen2];
 		for (int i = 0; i < slen * slen2; i++)
 		{
-			elems[i] = _m[i];//¶ÁÈ¡_m¾ØÕó
+			elems[i] = _m[i];//è¯»å–_mçŸ©é˜µ
 		}
 	}
 
-	inline matrix::matrix()//¶şÎ¬¾ØÕó
+	inline matrix::matrix()//äºŒç»´çŸ©é˜µ
 	{
 		slen = 2;
 		slen2 = slen;
@@ -67,7 +69,7 @@ namespace math {
 		this->setZero();
 	}
 
-	inline void matrix::setZero()//0¾ØÕó
+	inline void matrix::setZero()//0çŸ©é˜µ
 	{
 		if (elems) {
 			for (size_t i = 0; i < slen * slen2; i++)
@@ -77,7 +79,7 @@ namespace math {
 		}
 	}
 
-	inline const double matrix::norm() const//³¤¶È
+	inline const double matrix::norm() const//é•¿åº¦
 	{
 		double sum = 0.0;
 		for (size_t i = 0; i < slen * slen2; i++)
@@ -122,7 +124,7 @@ namespace math {
 		return elems[(idx1 - 1) * slen2 + idx2 - 1];
 	}
 
-	inline const matrix matrix::operator+(const matrix& _m) const//¾ØÕó¼Ó·¨
+	inline const matrix matrix::operator+(const matrix& _m) const//çŸ©é˜µåŠ æ³•
 	{
 		matrix mm(*this);
 		for (int i = 0; i < slen * slen2; i++)
@@ -211,7 +213,7 @@ namespace math {
 
 }
 
-inline const math::matrix dyadic(const math::vector& v1, const math::vector& v2)  //¶ş½×¾ØÕó
+inline const math::matrix dyadic(const math::vector& v1, const math::vector& v2)  //äºŒé˜¶çŸ©é˜µ
 {
 	math::matrix m = math::matrix(2);
 	for (size_t i = 1; i <= 2; i++)
@@ -220,7 +222,7 @@ inline const math::matrix dyadic(const math::vector& v1, const math::vector& v2)
 	return math::matrix(m);
 }
 
-inline const math::matrix transpose(const math::matrix& _m)  //¾ØÕóµÄ×ªÖÃ
+inline const math::matrix transpose(const math::matrix& _m)  //çŸ©é˜µçš„è½¬ç½®
 {
 	math::matrix m(_m);
 	for (size_t i = 1; i <= 2; i++)
@@ -229,7 +231,7 @@ inline const math::matrix transpose(const math::matrix& _m)  //¾ØÕóµÄ×ªÖÃ
 	return math::matrix(m);
 }
 
-inline const math::matrix operator*(const double _x, const math::matrix& _m)  //¾ØÕóµÄËã×Ó
+inline const math::matrix operator*(const double _x, const math::matrix& _m)  //çŸ©é˜µçš„ç®—å­
 {
 	math::matrix m(_m);
 	const unsigned int slen = _m.getLen();
@@ -240,7 +242,7 @@ inline const math::matrix operator*(const double _x, const math::matrix& _m)  //
 	return math::matrix(m);
 }
 
-inline const math::matrix inverse(const math::matrix& _m)   //¾ØÕóÇóÄæ,Ò²²»ÖªµÀ¶Ô²»¶Ô£¡
+inline const math::matrix inverse(const math::matrix& _m)   //çŸ©é˜µæ±‚é€†,ä¹Ÿä¸çŸ¥é“å¯¹ä¸å¯¹ï¼
 {
 	math::matrix b(_m);
 

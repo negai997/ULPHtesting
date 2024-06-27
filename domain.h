@@ -954,6 +954,9 @@ namespace sph {
 	//��������solve (���˼·��
 	inline void domain::solve(unsigned int _total)
 	{
+		//int deviceId;
+		//cudaGetDevice(&deviceId);
+		//printf("current device is %d\n", deviceId);
 		const unsigned int t_old = total;
 		nbBuilt = 0;
 		total = total + _total;
@@ -972,6 +975,9 @@ namespace sph {
 		//this->applyVelBc(0.005);
 		if (usingProgressbar)
 			std::cout << banner << mid << end;
+		
+		particlesa.shift2dev(particleNum());
+
 		for (; istep < total; istep++)
 		{			
 			const std::clock_t begin = std::clock();			
@@ -983,7 +989,7 @@ namespace sph {
 			//f = this->checkFluid2Buffer() || f;//生成ghost粒子			
 			if ((istep - t_old) % 20 == 0)
 			{
-				this->density_filter();//温度也校正一下，将温度的校正一并放到这个函数中
+				this->density_filter();//温度也校正一下，将温度的校正一并放到这个函数中(暂且不GPU并行)
 				//this->temperature_filter();
 			}
 			//this->iterate(dt);
@@ -1039,59 +1045,25 @@ namespace sph {
 		//静态热传导，由于速度为0，求dt时涉及速度加速度的统统不要
 
 		const double alpha_pi = 1.0;
-		double dtmin = DBL_MAX;
-		double dt00 = DBL_MAX;
-		//double dt11 = DBL_MAX;
-		double dt22 = DBL_MAX;
-		double dt33 = DBL_MAX;
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided)
-#endif
-		for (int i = 0; i < particles.size(); i++)
-		{
-			//const particle* ii = particles[i];
-			//double divv = 0;
-			double divv = particlesa.divvel[i];
-//#ifdef OMP_USE
-//#pragma omp parallel for schedule (guided) reduction(+:divv)
-//#endif
-//			for (int j = 0; j < ii->neiblist.size(); j++)
-//			{
-//				const int jj = particlesa.neiblist[i][j];
-//				const double dvx = particlesa.vx[i] - particlesa.vx[jj];
-//				const double dvy = particlesa.vy[i] - particlesa.vy[jj];
-//
-//				divv += (dvx * particlesa.dbweightx[i][j] + dvy * particlesa.dbweighty[i][j]) * particlesa.mass[jj] / particlesa.rho[jj];
-//			}
-			//const double beta_pi = 10.0 * dp;
-			//const double dt = 0.3 * particlesa.hsml[i] / (particlesa.hsml[i] * divv + (ii)->c + 1.2 * (alpha_pi * (ii)->c + beta_pi * abs(divv)));
-			//const double dt0 =0.25 * particlesa.hsml[i] / ((ii)->c + vmax);
-			const double dt0 = 0.1 * particlesa.hsml[i] / (sph::Fluid::SoundSpeed(particlesa.fltype[i]) + vmax);
-			dt00 = std::min(dt00, dt0);
-			//const double dt1 = 0.25 * particlesa.hsml[i] / (ii)->c;
-			//dt11 = std::min(dt11, dt1);			
-			const double ax = particlesa.ax[i];
-			const double ay = particlesa.ay[i];
-			const double fa = sqrt(ax * ax + ay * ay);
-			const double dt2 = 0.1 * sqrt(particlesa.hsml[i] / fa);
-			dt22 = std::min(dt22, dt2);
+		double* dtmin;
+		cudaMallocManaged(&dtmin, sizeof(double));
+		*dtmin = DBL_MAX;
 
-			//const double dt3 = 0.125 * particlesa.hsml[i] * particlesa.hsml[i]*particlesa.rho[i]/ sph::Fluid::Viscosity(particlesa.fltype[i]);//最大sph::Fluid::Viscosity(particlesa.fltype[i])
-			//dt33 = std::min(dt33, dt3);	
-			
-		}
-		dtmin = std::min(dt00, dt22);		
+		//改gpu
+		getdt_dev0(particles.size(), dtmin, particlesa.divvel, particlesa.hsml, particlesa.fltype, vmax, particlesa.ax, particlesa.ay);
+		//printf("dtmin=%e\n", *dtmin);
+		//dtmin = std::min(dt00, dt22);		
 		//dtmin = std::min(dtmin, 0.000001);
-		if (dtmin < 0) {
+		if (*dtmin < 0) {
 			std::cerr << std::endl << "dt 小于0:  " << dtmin << std::endl;
-			std::cerr << "dt00:  " << dt00 << std::endl;
+			//std::cerr << "dt00:  " << dt00 << std::endl;
 			//std::cerr << "dt11:  " << dt11 << std::endl;
-			std::cerr << "dt22:  " << dt22 << std::endl;
+			//std::cerr << "dt22:  " << dt22 << std::endl;
 			//std::cerr << "dt33:  " << dt33 << std::endl;
 			exit(-1);
 		}
 
-		return dtmin;
+		return *dtmin;
 		//return 0.0000001;
 	}
 
@@ -3886,14 +3858,8 @@ namespace sph {
 		if (vmax == 0 || c0 < sph::Fluid::SoundSpeed(FluidType::Water) * 0.4) {
 			c0 = sph::Fluid::SoundSpeed(FluidType::Water) * 0.4;
 		}
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided)
-#endif
-		for (int i = 0; i < particles.size(); i++)
-		{
-			//particle* ii = particles[i];
-			particlesa.c0[i] = c0;
-		}
+
+		adjustC0_dev0(particlesa.c0, c0, particleNum());
 	}
 
 	inline bool domain::inlet()//不再需要新增新的粒子，只需要更新粒子的参数

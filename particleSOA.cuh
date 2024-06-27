@@ -133,6 +133,7 @@ namespace sph {
 		void clearNeiblist(unsigned int pid) { for (int i = 0; i < MAX_NEIB; i++) { neiblist[pid][i] = 0; neibNum[pid] = 0; } };
 		void add2Neiblist(unsigned int pid, unsigned int i) { neiblist[pid][neibNum[pid]]=i; neibNum[pid]++ ; };
 		void setZeroDisp(unsigned int pid) { ux[pid] = uy[pid] = 0; };
+		void shift2dev(unsigned int particleNum);
 		//~particle();
 
 	protected:
@@ -236,6 +237,17 @@ namespace sph {
 		double* half_y;
 		double* half_temperature;
 	};
+
+	inline void particleSOA::shift2dev(unsigned int particleNum) {
+		int deviceId;
+		cudaGetDevice(&deviceId);
+		cudaMemPrefetchAsync(divvel, sizeof(double) * particleNum, deviceId, NULL);
+		cudaMemPrefetchAsync(hsml, sizeof(double) * particleNum, deviceId, NULL);
+		cudaMemPrefetchAsync(ax, sizeof(double) * particleNum, deviceId, NULL);
+		cudaMemPrefetchAsync(ay, sizeof(double) * particleNum, deviceId, NULL);
+		cudaMemPrefetchAsync(c0, sizeof(double) * particleNum, deviceId, NULL);
+	}
+
 
 	inline void particleSOA::initialize(std::vector<class particle*> particles, unsigned int idp)
 	{
