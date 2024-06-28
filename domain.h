@@ -989,13 +989,14 @@ namespace sph {
 			//f = this->checkFluid2Buffer() || f;//生成ghost粒子			
 			if ((istep - t_old) % 20 == 0)
 			{
-				this->density_filter();//温度也校正一下，将温度的校正一并放到这个函数中(暂且不GPU并行)
+				//this->density_filter();//温度也校正一下，将温度的校正一并放到这个函数中(暂且不GPU并行)
 				//this->temperature_filter();
 			}
 			//this->iterate(dt);
 			this->adjustC0();
 			this->inlet();//给入口定压力，速度继承
 			this->outlet();//这里判断outlet粒子,等out粒子变到intlet粒子，就重新建近邻，温度也得初始化
+			particlesa.shift2dev(particleNum());
 			this->buildNeighb(true);
 			//this->buildNeighb0(true);
 			this->run(dt);
@@ -1022,7 +1023,7 @@ namespace sph {
 			}
 			if (istep == t_old + 1 || (outIntval != 0 && (istep - t_old) % outIntval == 0))
 			{
-				this->output(istep);
+				//this->output(istep);
 				//this->output_one(istep);
 				//this->output_middle(istep);
 				//this->outputfluid(istep);				
@@ -1062,7 +1063,7 @@ namespace sph {
 			//std::cerr << "dt33:  " << dt33 << std::endl;
 			exit(-1);
 		}
-
+		
 		return *dtmin;
 		//return 0.0000001;
 	}
@@ -1070,6 +1071,9 @@ namespace sph {
 	//建近邻：需要考虑流入流出边界的近邻搜索
 	inline bool domain::buildNeighb(bool Force)
 	{
+		int deviceId;
+		cudaGetDevice(&deviceId);
+
 		if (drmax + drmax2 <= neibskin * dp * 1.01 && !Force) return false;
 		drmax = drmax2 = 0;
 		nb_updated = true;
@@ -1077,32 +1081,30 @@ namespace sph {
 		//std::cout << "Building neiblist\n";
 		const std::clock_t begin = std::clock();
 		drmax = drmax2 = 0;
-		double x_max = DBL_MIN;
+
+		/*double x_max = DBL_MIN;
 		double x_min = DBL_MAX;
 		double y_max = DBL_MIN;
-		double y_min = DBL_MAX;
-		/*#ifdef OMP_USE
-			#pragma omp parallel for schedule (guided) reduction(max:x_max,y_max)\
-			 reduction(min:x_min,y_min)
-		#endif*/
-		for (int i = 0; i < particles.size(); i++) {
-			//particle* ii = particles[i];
-			particlesa.setZeroDisp(i);
-			const double x = particlesa.getX(i);
-			const double y = particlesa.getY(i);
-			x_max = x_max < x ? x : x_max;
-			x_min = x_min > x ? x : x_min;
-			y_max = y_max < y ? y : y_max;
-			y_min = y_min > y ? y : y_min;
-		}
+		double y_min = DBL_MAX;*/
+		double* x_max;
+		double* x_min;
+		double* y_max;
+		double* y_min;
+		cudaMallocManaged(&x_max, sizeof(double));
+		cudaMallocManaged(&x_min, sizeof(double));
+		cudaMallocManaged(&y_max, sizeof(double));
+		cudaMallocManaged(&y_min, sizeof(double));
 
-		x_max += 5.0 * dp;
-		x_min -= 5.0 * dp;
-		y_max += 5.0 * dp;
-		y_min -= 5.0 * dp;
+		//GPU
+		buildNeighb_dev01(particles.size(), particlesa.ux, particlesa.uy, particlesa.x, particlesa.y, x_max, x_min, y_max, y_min);
+
+		*x_max += 5.0 * dp;
+		*x_min -= 5.0 * dp;
+		*y_max += 5.0 * dp;
+		*y_min -= 5.0 * dp;
 		//确定计算域
-		const double dxrange = x_max - x_min;
-		const double dyrange = y_max - y_min;
+		const double dxrange = *x_max - *x_min;
+		const double dyrange = *y_max - *y_min;
 
 		const int ntotal = static_cast<int>(particles.size());
 		//const int gtotal = static_cast<int>(ghosts.size());
@@ -1111,178 +1113,39 @@ namespace sph {
 		const int ngridx = std::min(int(pow(ntotal * dxrange / (dyrange * 3), 1.0 / 3.0)) + 1, xgridmax);
 		const int ngridy = std::min(int(ngridx * dyrange / dxrange) + 1, ygridmax);
 
-		math::matrix grid(ngridx, ngridy);//网格编号，使用矩阵来对网格进行编号。（10，8）
-
-		int* xgcell = new int[ntotal];//三个数组，分别来存储每个粒子的编号信息
-		int* ygcell = new int[ntotal];
-		int* celldata = new int[ntotal];
-
-
-		/*#ifdef OMP_USE
-			#pragma omp parallel for schedule (guided)
-		#endif*/
-		for (auto i = 1; i <= ntotal; i++)
-		{
-			double x, y;			
-				x = particlesa.getX(i-1);
-				y = particlesa.getY(i-1);
-				particlesa.clearNeiblist(i-1);					
-			if (x != x) {
-				std::cerr << "Nan\n";
-			}
-
-			const int xxcell = int(static_cast<double>(ngridx) / dxrange * (x - x_min) + 1.0);//粒子x所对应的网格的坐标>=1
-			const int yycell = int(static_cast<double>(ngridy) / dyrange * (y - y_min) + 1.0);
-			//数组赋值，记录每个粒子的网格坐标,用两个一维数值分别记录
-			xgcell[i - 1] = xxcell;
-			ygcell[i - 1] = yycell;
-			if (xxcell > ngridx || yycell > ngridy || i > ntotal) {
-				std::cerr << std::endl << "\nError: Neighbor indexing out of range, i " << i << std::endl;
-				std::cerr << "xxcell " << xxcell << " yycell " << yycell;
-				exit(-1);
-			}
-			try {
-				celldata[i - 1] = static_cast<int>(grid(xxcell, yycell));//记录粒子所在的网格编号；
-				//但是后面有一句grid(xxcell, yycell) = i;这样就不再是记录网格编号，而是记录i，即粒子id
-				//std::cerr << std::endl << "static_cast<int>(grid(xxcell, yycell)): " << celldata[i - 1] << std::endl;
-			}
-			catch (int e) {
-				std::cout << "\nException: " << e << std::endl;
-				std::cout << xxcell << '\t' << yycell;
-			}
-			//std::cerr << std::endl << "grid(xxcell, yycell): " << grid(xxcell, yycell) << std::endl;
-			grid(xxcell, yycell) = i;// i starts from 0 //没理解这句什么意思？
-			//std::cerr << std::endl << "grid(xxcell, yycell): " << grid(xxcell, yycell) << std::endl;
+		//math::matrix grid(ngridx, ngridy);//网格编号，使用矩阵来对网格进行编号。（10，8）
+		double* grid_d;
+		cudaMallocManaged(&grid_d, sizeof(double) * ngridx * ngridy);
+		for (int gridi = 0; gridi < ngridx * ngridy; gridi++) {
+			grid_d[gridi] = 0;
 		}
-		//
-		/*#ifdef OMP_USE
-			#pragma omp parallel for schedule (guided)
-		#endif*/
-		for (auto i = 1; i <= ntotal; i++)// i=0 ~ ntotal-1
-		{
-			const double hsml = particlesa.gethsml(i-1) ;
-			const int dnxgcell = xgcell[i - 1] - int(static_cast<double>(ngridx) * 3 * hsml / dxrange) - 1;
-			const int dnygcell = ygcell[i - 1] - int(static_cast<double>(ngridy) * 3 * hsml / dyrange) - 1;
-			const int dpxgcell = xgcell[i - 1] + int(static_cast<double>(ngridx) * 3 * hsml / dxrange) + 1;
-			const int dpygcell = ygcell[i - 1] + int(static_cast<double>(ngridy) * 3 * hsml / dyrange) + 1;
-			
-			//const int minxcell = 1;
-			const int minxcell = dnxgcell > 1 ? dnxgcell : 1;
-			const int maxxcell = dpxgcell < ngridx ? dpxgcell : ngridx;
-			const int minycell = dnygcell > 1 ? dnygcell : 1;
-			const int maxycell = dpygcell < ngridy ? dpygcell : ngridy;
-			//goto语句
-			//for (auto ycell = minycell; ycell <= maxycell; ycell++)
-			//{
-			//	for (auto xcell = minxcell; xcell <= maxxcell; xcell++)
-			//	{
-			//		int j = static_cast<int>(grid(xcell, ycell));//网格编号
-			//	label:	if (j > i)//防止重复比较
-			//	{
-			//		//math::vector xi(particles[i-1]->getX() - particles[j-1]->getX(), particles[i-1]->getY() - particles[j-1]->getY());
-			//		const double xi = particlesa.getX(i-1) ;
-			//		const double yi = particlesa.getY(i-1) ;
-			//		const double xj = particlesa.getX(j-1) ;
-			//		const double yj = particlesa.getY(j-1) ;
-			//		const double dx = xi - xj;
-			//		const double dy = yi - yj;
-			//		const double r = sqrt(dx * dx + dy * dy);//除了一般的r，还有周期边界的r2
-			//		if (r == 0 && i <= ntotal && j <= ntotal) {
-			//			std::cerr << "\nError: two particles occupy the same position\n";
-			//			std::cerr << "i=" << i << " j=" << j << std::endl;
-			//			std::cerr << ( particlesa.idx[i-1] ) << " and " << ( particlesa.idx[j-1] ) << std::endl;
-			//			std::cerr << "at " << xi << '\t' << yi;
-			//			std::cerr << "ntotal=" << ntotal << std::endl;
-			//			this->output(istep);
-			//			exit(-1);
-			//		}
-			//		const double mhsml = particlesa.gethsml(i-1);
-			//		const double horizon = 3.3 * mhsml;//					
-			//		if (r < horizon) {						
-			//				particlesa.add2Neiblist(i - 1, j - 1);
-			//				particlesa.add2Neiblist(j - 1, i - 1);												
-			//		}
-			//		
-			//		j = celldata[j - 1];
-			//		goto label;
-			//	}
-			//	}
-			//}
-			//goto语句转为if语句
-			for (auto ycell = minycell; ycell <= maxycell; ycell++)
-			{
-				for (auto xcell = minxcell; xcell <= maxxcell; xcell++)
-				{
-					int j = static_cast<int>(grid(xcell, ycell));//网格编号
-					for (j; j > i; j = celldata[j - 1])//防止重复比较
-					{
-					//math::vector xi(particles[i-1]->getX() - particles[j-1]->getX(), particles[i-1]->getY() - particles[j-1]->getY());
-					const double xi = particlesa.getX(i-1);
-					const double yi = particlesa.getY(i-1);
-					const double xj = particlesa.getX(j-1);
-					const double yj = particlesa.getY(j-1);
-					const double dx = xi - xj;
-					const double dy = yi - yj;
-					const double r = sqrt(dx * dx + dy * dy);//除了一般的r，还有周期边界的r2
-					if (r == 0 && i <= ntotal && j <= ntotal) {
-						std::cerr << "\nError: two particles occupy the same position\n";
-						std::cerr << "i=" << i << " j=" << j << std::endl;
-						std::cerr << (particlesa.idx[i-1]) << " and " << (particlesa.idx[j-1]) << std::endl;
-						std::cerr << "at " << xi << '\t' << yi;
-						std::cerr << "ntotal=" << ntotal << std::endl;
-						this->output(istep);
-						exit(-1);
-						}
-					const double mhsml = particlesa.gethsml(i-1);
-					const double horizon = 3.3 * mhsml;//					
-					if (r < horizon) {
-						particlesa.add2Neiblist(i - 1, j - 1);
-						particlesa.add2Neiblist(j - 1, i - 1);
-						}										
-					}
-				}
-			}
-			//当out粒子转到inlet粒子，转过来的inlet粒子搜不到旧的inlet粒子了
-			//当进出口使用周期边界时，加上下面这段:
-			if (xgcell[i - 1] < 3)//当粒子数较小时，背景网格x=1的网格中有时候只有一竖条粒子，明显不足。需要把x=2的背景网格也拉进来寻找
-			{
-				//std::cerr << std::endl << "find xmimcell: " << xgcell[i - 1] << std::endl;
-				//std::cerr << std::endl << "粒子i = " << i << std::endl;				
-				for (auto ycell = minycell; ycell <= maxycell; ycell++)
-				{
-					for (auto xcell = ngridx - 1; xcell <= ngridx; xcell++) //最右边的两层网格 ngridx 与 ngridx-1
-					{
-						int j = static_cast<int>(grid(xcell, ycell));
-						for (j; j > 0; j = celldata[j - 1])
-						{
-							//除了一般的r，还有周期边界的r2
-							if (particlesa.iotype[i-1] == InoutType::Inlet)
-							{
-								const double xi = particlesa.getX(i-1);
-								const double yi = particlesa.getY(i-1);
-								const double xj = particlesa.getX(j-1);
-								const double yj = particlesa.getY(j-1);
-								const double dy = yi - yj;
-								const double dx2 = xi + lengthofx - xj;
-								const double r2 = sqrt(dx2 * dx2 + dy * dy);
-								const double mhsml = particlesa.gethsml(i-1);
-								const double horizon = 3.3 * mhsml;//
-								if (r2 < horizon) {
-									//particlesa.add2Neiblist(i - 1, j - 1);
-									particlesa.add2Neiblist(i - 1, j - 1);
-									particlesa.add2Neiblist(j - 1, i - 1);
-									//std::cerr << std::endl << "find onutlet of inlet: " << j << std::endl;
-								}
-							}
-							//std::cerr << std::endl << "j: " << j << std::endl;						
-						}
-					}
-				}
-			}
-		}
-		free(xgcell);
-		free(ygcell);
-		free(celldata);
+		cudaMemPrefetchAsync(grid_d, sizeof(double) * ngridx * ngridy, deviceId, NULL);
+
+		//int* xgcell = new int[ntotal];//三个数组，分别来存储每个粒子的编号信息
+		//int* ygcell = new int[ntotal];
+		//int* celldata = new int[ntotal];
+		int* xgcell ;//三个数组，分别来存储每个粒子的编号信息
+		int* ygcell ;
+		int* celldata ;
+		cudaMallocManaged(&xgcell, sizeof(int) * ntotal);
+		cudaMallocManaged(&ygcell, sizeof(int) * ntotal);
+		cudaMallocManaged(&celldata, sizeof(int) * ntotal);
+		cudaMemPrefetchAsync(xgcell, sizeof(int) * ntotal, deviceId, NULL);
+		cudaMemPrefetchAsync(ygcell, sizeof(int) * ntotal, deviceId, NULL);
+		cudaMemPrefetchAsync(celldata, sizeof(int) * ntotal, deviceId, NULL);
+
+
+		//GPU
+		/*for (int j; j < particleNum(); j++) {
+			printf("")
+		}*/
+		buildNeighb_dev02(particles.size(), particlesa.x, particlesa.y, particlesa.neiblist, particlesa.neibNum\
+			, ngridx, ngridy, dxrange, dyrange, *x_min, *y_min\
+			, xgcell, ygcell, celldata, grid_d, particlesa.hsml, particlesa.idx, particlesa.iotype, lengthofx);
+
+		cudaFree(xgcell);
+		cudaFree(ygcell);
+		cudaFree(celldata);
 		const std::clock_t end = std::clock();
 		//this->debugNeib(1240);
 		//this->debugNeib(1239);

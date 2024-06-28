@@ -36,3 +36,5 @@ namespace sph {
 		Moisture
 	};
 }
+
+constexpr auto MAX_NEIB = 50;

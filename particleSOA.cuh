@@ -93,7 +93,7 @@ namespace sph {
 		void integrationfull(const double, unsigned int pid);
 		void shifting_c(unsigned int pid);
 		void shifting(const double, unsigned int pid);
-		void clearNeiblist(unsigned int pid) { for (int i = 0; i < MAX_NEIB; i++) { neiblist[pid][i] = 0; neibNum[pid] = 0; } };
+		void clearNeiblist(unsigned int pid) { for (int i = 0; i < MAX_NEIB; i++) { neiblist[pid][i] = 0; } neibNum[pid] = 0; };
 		void add2Neiblist(unsigned int pid, unsigned int i) { neiblist[pid][neibNum[pid]]=i; neibNum[pid]++ ; };
 		void setZeroDisp(unsigned int pid) { ux[pid] = uy[pid] = 0; };
 		void shift2dev(unsigned int particleNum);
@@ -212,7 +212,16 @@ namespace sph {
 		cudaMemPrefetchAsync(x, sizeof(double) * particleNum, deviceId, NULL);
 		cudaMemPrefetchAsync(y, sizeof(double) * particleNum, deviceId, NULL);
 		cudaMemPrefetchAsync(iotype, sizeof(InoutType) * particleNum, deviceId, NULL);
+		cudaMemPrefetchAsync(ux, sizeof(double) * particleNum, deviceId, NULL);
+		cudaMemPrefetchAsync(uy, sizeof(double) * particleNum, deviceId, NULL);
+		cudaMemPrefetchAsync(neibNum, sizeof(unsigned int) * particleNum, deviceId, NULL);
+		cudaMemPrefetchAsync(idx, sizeof(unsigned int) * particleNum, deviceId, NULL);
+		cudaMemPrefetchAsync(neiblist, sizeof(unsigned int) * particleNum, deviceId, NULL);
+		for (int i = 0; i < particleNum; i++) 
+			cudaMemPrefetchAsync(neiblist[i], sizeof(unsigned int) * MAX_NEIB, deviceId, NULL);
+
 	}
+	
 
 
 	inline void particleSOA::initialize(std::vector<class particle*> particles, unsigned int idp)

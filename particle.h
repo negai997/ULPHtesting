@@ -6,7 +6,7 @@
 #include "fluid.h"
 #include "classes_type.h"
 
-constexpr auto MAX_NEIB = 50;
+
 
 namespace sph {
 	const double C_s = 0.15;
