@@ -25,11 +25,11 @@ __global__ void buildNeighb_dev1(unsigned int particleNum, double* ux, double* u
 
 __global__ void buildNeighb_dev2(unsigned int particleNum, double* X, double* Y, unsigned int** neiblist, unsigned int* neibNum\
 	, const int ngridx, const int ngridy, const double dxrange, const double dyrange, double x_min, double y_min\
-	, int* xgcell, int* ygcell, int* celldata, double* grid_d);
+	, int* xgcell, int* ygcell, int* celldata, int* grid_d);
 
 __global__ void buildNeighb_dev3(unsigned int particleNum, double* X, double* Y, unsigned int** neiblist, unsigned int* neibNum, const double* Hsml\
 	, const int ngridx, const int ngridy, const double dxrange, const double dyrange, unsigned int* idx, sph::InoutType* iotype\
-	, int* xgcell, int* ygcell, int* celldata, double* grid_d, double lengthofx);
+	, int* xgcell, int* ygcell, int* celldata, int* grid_d, double lengthofx);
 
 void getdt_dev0(unsigned int particleNum, double* dtmin, double* divvel, double* hsml, sph::FluidType* fltype, double vmax, double* Ax, double* Ay);
 
@@ -43,7 +43,7 @@ void buildNeighb_dev01(unsigned int particleNum, double* ux, double* uy, double*
 
 void buildNeighb_dev02(unsigned int particleNum, double* X, double* Y, unsigned int** neiblist, unsigned int* neibNum\
 						, const int ngridx, const int ngridy, const double dxrange, const double dyrange, double x_min, double y_min\
-						, int* xgcell, int* ygcell, int* celldata, double* grid_d, const double* Hsml, unsigned int* idx, sph::InoutType* iotype, double lengthofx);
+						, int* xgcell, int* ygcell, int* celldata, int* grid_d, const double* Hsml, unsigned int* idx, sph::InoutType* iotype, double lengthofx);
 
 
 

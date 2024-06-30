@@ -989,14 +989,14 @@ namespace sph {
 			//f = this->checkFluid2Buffer() || f;//生成ghost粒子			
 			if ((istep - t_old) % 20 == 0)
 			{
-				//this->density_filter();//温度也校正一下，将温度的校正一并放到这个函数中(暂且不GPU并行)
+				this->density_filter();//温度也校正一下，将温度的校正一并放到这个函数中(暂且不GPU并行)
 				//this->temperature_filter();
 			}
 			//this->iterate(dt);
 			this->adjustC0();
 			this->inlet();//给入口定压力，速度继承
 			this->outlet();//这里判断outlet粒子,等out粒子变到intlet粒子，就重新建近邻，温度也得初始化
-			particlesa.shift2dev(particleNum());
+			//particlesa.shift2dev(particleNum());
 			this->buildNeighb(true);
 			//this->buildNeighb0(true);
 			this->run(dt);
@@ -1023,7 +1023,7 @@ namespace sph {
 			}
 			if (istep == t_old + 1 || (outIntval != 0 && (istep - t_old) % outIntval == 0))
 			{
-				//this->output(istep);
+				this->output(istep);
 				//this->output_one(istep);
 				//this->output_middle(istep);
 				//this->outputfluid(istep);				
@@ -1090,10 +1090,16 @@ namespace sph {
 		double* x_min;
 		double* y_max;
 		double* y_min;
+
 		cudaMallocManaged(&x_max, sizeof(double));
 		cudaMallocManaged(&x_min, sizeof(double));
 		cudaMallocManaged(&y_max, sizeof(double));
 		cudaMallocManaged(&y_min, sizeof(double));
+
+		*x_max = DBL_MIN;
+		*x_min = DBL_MAX;
+		*y_max = DBL_MIN;
+		*y_min = DBL_MAX;
 
 		//GPU
 		buildNeighb_dev01(particles.size(), particlesa.ux, particlesa.uy, particlesa.x, particlesa.y, x_max, x_min, y_max, y_min);
@@ -1105,6 +1111,7 @@ namespace sph {
 		//确定计算域
 		const double dxrange = *x_max - *x_min;
 		const double dyrange = *y_max - *y_min;
+		printf("\nallow us to test the range of which:x:%lf and y:%lf\n", dxrange, dyrange);
 
 		const int ntotal = static_cast<int>(particles.size());
 		//const int gtotal = static_cast<int>(ghosts.size());
@@ -1114,12 +1121,12 @@ namespace sph {
 		const int ngridy = std::min(int(ngridx * dyrange / dxrange) + 1, ygridmax);
 
 		//math::matrix grid(ngridx, ngridy);//网格编号，使用矩阵来对网格进行编号。（10，8）
-		double* grid_d;
-		cudaMallocManaged(&grid_d, sizeof(double) * ngridx * ngridy);
+		int* grid_d;
+		cudaMallocManaged(&grid_d, sizeof(int) * ngridx * ngridy);
 		for (int gridi = 0; gridi < ngridx * ngridy; gridi++) {
 			grid_d[gridi] = 0;
 		}
-		cudaMemPrefetchAsync(grid_d, sizeof(double) * ngridx * ngridy, deviceId, NULL);
+		cudaMemPrefetchAsync(grid_d, sizeof(int) * ngridx * ngridy, deviceId, NULL);
 
 		//int* xgcell = new int[ntotal];//三个数组，分别来存储每个粒子的编号信息
 		//int* ygcell = new int[ntotal];

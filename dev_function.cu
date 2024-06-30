@@ -137,9 +137,9 @@ __global__ void outlet_dev(unsigned int particleNum, double* x, sph::InoutType* 
 }
 
 __global__ void buildNeighb_dev1(unsigned int particleNum,double*ux,double*uy,double*X,double*Y, double* X_max,double* X_min,double* Y_max,double* Y_min) {
-	double x_max = 1e300;
+	double x_max = 1e-300;
 	double x_min = 1e300;
-	double y_max = 1e300;
+	double y_max = 1e-300;
 	double y_min = 1e300;
 	for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < particleNum; i += gridDim.x * blockDim.x) {
 		//particle* ii = particles[i];
@@ -161,7 +161,7 @@ __global__ void buildNeighb_dev1(unsigned int particleNum,double*ux,double*uy,do
 
 __global__ void buildNeighb_dev2(unsigned int particleNum, double* X, double* Y, unsigned int** neiblist, unsigned int* neibNum\
 								, const int ngridx, const int ngridy, const double dxrange, const double dyrange, double x_min, double y_min\
-								, int* xgcell, int* ygcell, int* celldata, double* grid_d) {
+								, int* xgcell, int* ygcell, int* celldata, int* grid_d) {
 	for (int i = blockDim.x * blockIdx.x + threadIdx.x + 1; i < particleNum+1; i += gridDim.x * blockDim.x)
 	{
 		double x, y;
@@ -194,7 +194,7 @@ __global__ void buildNeighb_dev2(unsigned int particleNum, double* X, double* Y,
 			//可以用全局变量将判断情况传回主机后在主机判断是否exit，目前暂且搁置。
 		}
 		//try {
-			celldata[i - 1] = static_cast<int>(grid_d[xxcell * ngridy + yycell]);//记录粒子所在的网格编号；
+			celldata[i - 1] = static_cast<int>(grid_d[(xxcell-1) * ngridy + yycell-1]);//记录粒子所在的网格编号；
 			//但是后面有一句grid(xxcell, yycell) = i;这样就不再是记录网格编号，而是记录i，即粒子id
 			//std::cerr << std::endl << "static_cast<int>(grid(xxcell, yycell)): " << celldata[i - 1] << std::endl;
 		//}
@@ -203,14 +203,14 @@ __global__ void buildNeighb_dev2(unsigned int particleNum, double* X, double* Y,
 		//	std::cout << xxcell << '\t' << yycell;
 		//}
 		//std::cerr << std::endl << "grid(xxcell, yycell): " << grid(xxcell, yycell) << std::endl;
-		grid_d[xxcell * ngridy + yycell] = i;// i starts from 0 //没理解这句什么意思？
+		grid_d[(xxcell - 1) * ngridy + yycell - 1] = i;// i starts from 0 //没理解这句什么意思？
 		//std::cerr << std::endl << "grid(xxcell, yycell): " << grid(xxcell, yycell) << std::endl;
 	}
 }
 
 __global__ void buildNeighb_dev3(unsigned int particleNum, double* X, double* Y, unsigned int** neiblist, unsigned int* neibNum, const double* Hsml\
 					, const int ngridx, const int ngridy, const double dxrange, const double dyrange, unsigned int* idx, sph::InoutType* iotype\
-					, int* xgcell, int* ygcell, int* celldata, double* grid_d,double lengthofx) {
+					, int* xgcell, int* ygcell, int* celldata, int* grid_d,double lengthofx) {
 	for (int i = blockDim.x * blockIdx.x + threadIdx.x + 1; i <= particleNum; i += gridDim.x * blockDim.x)// i=0 ~ ntotal-1
 	{
 		const double hsml =Hsml[i - 1];
@@ -231,9 +231,11 @@ __global__ void buildNeighb_dev3(unsigned int particleNum, double* X, double* Y,
 		{
 			for (auto xcell = minxcell; xcell <= maxxcell; xcell++)
 			{
-				int j = static_cast<int>(grid_d[xcell * ngridy + ycell]);//网格编号
+				int j = static_cast<int>(grid_d[(xcell - 1) * ngridy + ycell - 1]);//网格编号
 				for (j; j > 0; j = celldata[j - 1])//防止重复比较（并行后取消）
 				{
+					if (i == j)
+						continue;
 					//math::vector xi(particles[i-1]->getX() - particles[j-1]->getX(), particles[i-1]->getY() - particles[j-1]->getY());
 					const double xi = X[i - 1];
 					const double yi = Y[i - 1];
@@ -278,7 +280,7 @@ __global__ void buildNeighb_dev3(unsigned int particleNum, double* X, double* Y,
 			{
 				for (auto xcell = ngridx - 1; xcell <= ngridx; xcell++) //最右边的两层网格 ngridx 与 ngridx-1
 				{
-					int j = static_cast<int>(grid_d[xcell * ngridy + ycell]);
+					int j = static_cast<int>(grid_d[(xcell - 1) * ngridy + ycell - 1]);
 					for (j; j > 0; j = celldata[j - 1])
 					{
 						//除了一般的r，还有周期边界的r2
@@ -312,7 +314,7 @@ __global__ void buildNeighb_dev3(unsigned int particleNum, double* X, double* Y,
 
 void getdt_dev0(unsigned int particleNum, double* dtmin, double* divvel, double* hsml, sph::FluidType* fltype, double vmax, double* Ax, double* Ay) {
 
-	getdt_dev<<<1,32>>>(particleNum, dtmin, divvel, hsml, fltype, vmax, Ax, Ay);
+	getdt_dev<<<32,32>>>(particleNum, dtmin, divvel, hsml, fltype, vmax, Ax, Ay);
 	CHECK(cudaDeviceSynchronize());
 }
 
@@ -332,14 +334,15 @@ void outlet_dev0(unsigned int particleNum, double* x, sph::InoutType* iotype, do
 }
 
 void buildNeighb_dev01(unsigned int particleNum, double* ux, double* uy, double* X, double* Y, double* X_max, double* X_min, double* Y_max, double* Y_min) {
-	buildNeighb_dev1 << <1, 32 >> > (particleNum, ux, uy, X, Y, X_max, X_min, Y_max, Y_min);
+	buildNeighb_dev1 << <32, 32 >> > (particleNum, ux, uy, X, Y, X_max, X_min, Y_max, Y_min);
 	CHECK(cudaDeviceSynchronize());
 }
 
 void buildNeighb_dev02(unsigned int particleNum, double* X, double* Y, unsigned int** neiblist, unsigned int* neibNum\
 	, const int ngridx, const int ngridy, const double dxrange, const double dyrange, double x_min, double y_min\
-	, int* xgcell, int* ygcell, int* celldata, double* grid_d, const double* Hsml, unsigned int* idx, sph::InoutType* iotype, double lengthofx) {
-	buildNeighb_dev2 << <1, 3 >> > ( particleNum, X, Y, neiblist, neibNum, ngridx, ngridy, dxrange, dyrange, x_min, y_min, xgcell, ygcell, celldata, grid_d);
+	, int* xgcell, int* ygcell, int* celldata, int* grid_d, const double* Hsml, unsigned int* idx, sph::InoutType* iotype, double lengthofx) {
+	//目前网格法无法并行，暂不考虑其并行方法，但并行化建议使用全搜索法
+	buildNeighb_dev2 << <1, 1 >> > ( particleNum, X, Y, neiblist, neibNum, ngridx, ngridy, dxrange, dyrange, x_min, y_min, xgcell, ygcell, celldata, grid_d);
 	CHECK(cudaDeviceSynchronize());
 	buildNeighb_dev3 << <32, 32 >> > (particleNum, X, Y, neiblist, neibNum, Hsml, ngridx, ngridy, dxrange, dyrange, idx, iotype, xgcell, ygcell, celldata, grid_d, lengthofx);
 	CHECK(cudaDeviceSynchronize());
