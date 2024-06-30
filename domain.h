@@ -1021,7 +1021,7 @@ namespace sph {
 				else
 					this->screen(istep);
 			}
-			if (istep == t_old + 1 || (outIntval != 0 && (istep - t_old) % outIntval == 0))
+			if (istep == t_old + 1 || (outIntval != 0 && (istep - t_old) % outIntval == 0)||istep == t_old + 10)
 			{
 				this->output(istep);
 				//this->output_one(istep);
@@ -1111,7 +1111,7 @@ namespace sph {
 		//确定计算域
 		const double dxrange = *x_max - *x_min;
 		const double dyrange = *y_max - *y_min;
-		printf("\nallow us to test the range of which:x:%lf and y:%lf\n", dxrange, dyrange);
+		//printf("\nallow us to test the range of which:x:%lf and y:%lf\n", dxrange, dyrange);
 
 		const int ntotal = static_cast<int>(particles.size());
 		//const int gtotal = static_cast<int>(ghosts.size());
@@ -1248,68 +1248,73 @@ namespace sph {
 	inline void domain::updateWeight()
 	{
 		const std::clock_t begin = std::clock();
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided)
-#endif
-		for (int i = 0; i < particles.size(); i++)
-		{
 
-			//particle* ii = particles[i];
+		singlestep_updateWeight_dev0(particleNum(), particlesa.neibNum, particlesa.hsml, particlesa.neiblist, particlesa.x, particlesa.y\
+			, particlesa.iotype, lengthofx, particlesa.bweight, particlesa.dbweightx, particlesa.dbweighty);
+//#ifdef OMP_USE
+//#pragma omp parallel for schedule (guided)
+//#endif
+//		for (int i = 0; i < particles.size(); i++)
+//		{
+//
+//			//particle* ii = particles[i];
+//
+//			const unsigned int neibNum = particlesa.neibNum[i];
+//			const double hsml = particlesa.hsml[i];
+//			double sum = 0;
+//
+//			//
+//			/*#ifdef OMP_USE
+//				#pragma omp parallel for schedule (guided) reduction(+:sum)
+//			#endif*/
+//			for (int j = 0; j < neibNum; j++)//�����κ����Աȣ�neiblist.size()=neighborNum(i)
+//			{
+//				const int jj = particlesa.neiblist[i][j];//jj=k
+//				double dx = particlesa.x[i]-particlesa.x[jj];//xi(1)
+//				if (particlesa.iotype[i] == InoutType::Inlet && particlesa.iotype[jj] == InoutType::Outlet)
+//				{
+//					dx = particlesa.x[i] + lengthofx - particlesa.x[jj];//xi(1)
+//				}
+//				if (particlesa.iotype[i] == InoutType::Outlet && particlesa.iotype[jj] == InoutType::Inlet)
+//				{
+//					dx = particlesa.x[i] - lengthofx - particlesa.x[jj];//xi(1)
+//				}
+//				//const double dx = particlesa.x[i]-particlesa.x[jj];//xi(1)
+//				const double dy = particlesa.y[i] - particlesa.y[jj];//xi(2)
+//				const math::vector xi(dx, dy);
+//				const double r = xi.length();
+//				//const double q = r / hsml;   //q�Ĵ�����ͬ�������һ��mhsml(662-664)
+//				const double hsmlj = particlesa.hsml[jj];//hsmlΪhsml(i)��hsmljΪhsml(k)
+//				const double mhsml = (hsml + hsmlj) * 0.5;
+//				const double q = r / mhsml;
+//				if (q > 3.0) {
+//					particlesa.bweight[i][j] = 0;
+//					particlesa.dbweightx[i][j] = 0;
+//					particlesa.dbweighty[i][j] = 0;
+//					continue;
+//				}
+//
+//				const double fac = 1.0 / (math::PI * mhsml * mhsml) / (1.0 - 10.0 * exp9);
+//				const double bweight = fac * (exp(-q * q) - exp9);
+//
+//				sum += bweight;
+//				particlesa.bweight[i][j] = bweight;
+//				const double factor = fac * exp(-q * q) * (-2.0 / mhsml / mhsml);
+//
+//				particlesa.dbweightx[i][j] = factor * dx;
+//				particlesa.dbweighty[i][j] = factor * dy;
+//			}
+//
+//#ifdef OMP_USE
+//#pragma omp parallel for schedule (guided)
+//#endif
+//			for (int j = 0; j < particlesa.neibNum[i]; j++)
+//			{
+//				particlesa.bweight[i][j] /= sum;
+//			}
+//		}
+ 
 
-			const unsigned int neibNum = particlesa.neibNum[i];
-			const double hsml = particlesa.hsml[i];
-			double sum = 0;
-
-			//
-			/*#ifdef OMP_USE
-				#pragma omp parallel for schedule (guided) reduction(+:sum)
-			#endif*/
-			for (int j = 0; j < neibNum; j++)//�����κ����Աȣ�neiblist.size()=neighborNum(i)
-			{
-				const int jj = particlesa.neiblist[i][j];//jj=k
-				double dx = particlesa.x[i]-particlesa.x[jj];//xi(1)
-				if (particlesa.iotype[i] == InoutType::Inlet && particlesa.iotype[jj] == InoutType::Outlet)
-				{
-					dx = particlesa.x[i] + lengthofx - particlesa.x[jj];//xi(1)
-				}
-				if (particlesa.iotype[i] == InoutType::Outlet && particlesa.iotype[jj] == InoutType::Inlet)
-				{
-					dx = particlesa.x[i] - lengthofx - particlesa.x[jj];//xi(1)
-				}
-				//const double dx = particlesa.x[i]-particlesa.x[jj];//xi(1)
-				const double dy = particlesa.y[i] - particlesa.y[jj];//xi(2)
-				const math::vector xi(dx, dy);
-				const double r = xi.length();
-				//const double q = r / hsml;   //q�Ĵ�����ͬ�������һ��mhsml(662-664)
-				const double hsmlj = particlesa.hsml[jj];//hsmlΪhsml(i)��hsmljΪhsml(k)
-				const double mhsml = (hsml + hsmlj) * 0.5;
-				const double q = r / mhsml;
-				if (q > 3.0) {
-					particlesa.bweight[i][j] = 0;
-					particlesa.dbweightx[i][j] = 0;
-					particlesa.dbweighty[i][j] = 0;
-					continue;
-				}
-
-				const double fac = 1.0 / (math::PI * mhsml * mhsml) / (1.0 - 10.0 * exp9);
-				const double bweight = fac * (exp(-q * q) - exp9);
-
-				sum += bweight;
-				particlesa.bweight[i][j] = bweight;
-				const double factor = fac * exp(-q * q) * (-2.0 / mhsml / mhsml);
-
-				particlesa.dbweightx[i][j] = factor * dx;
-				particlesa.dbweighty[i][j] = factor * dy;
-			}
-
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided)
-#endif
-			for (int j = 0; j < particlesa.neibNum[i]; j++)
-			{
-				particlesa.bweight[i][j] /= sum;
-			}
-		}
 		// ghosts
 		
 //#ifdef OMP_USE
@@ -2953,66 +2958,9 @@ namespace sph {
 	inline void domain::single_step()  //
 	{
 		const std::clock_t begin = std::clock();
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided)
-#endif
-		for (int i = 0; i < particles.size(); i++)
-		{
-			//particle* ii = particles[i];  
 
-			if (particlesa.getBtype(i) != sph::BoundaryType::Boundary)   
-			{
-				if (particlesa.rho[i] < particlesa.rho_min[i])
-				{
-					particlesa.rho[i] = particlesa.rho_min[i];   
-				}
-			}
-		}
+		singlestep_rhoeos_dev0(particleNum(), particlesa.btype, particlesa.rho, particlesa.rho_min, particlesa.c0, particlesa.rho0, particlesa.gamma, particlesa.back_p, particlesa.press);
 
-		// pressure 状态方程     
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided)	
-#endif
-		for (int i = 0; i < particles.size(); i++)
-		{
-			particle* ii = particles[i];
-			if (particlesa.btype[i] == sph::BoundaryType::Boundary) continue;
-			const double c0 = particlesa.c0[i];
-			const double rho0 = particlesa.rho0[i];
-			const double rhoi = particlesa.rho[i];
-			const double gamma = (ii)->gamma;
-			const double b = c0 * c0 * rho0 / gamma;     //b--B,
-			const double p_back = (ii)->back_p;
-			//			if (particlesa.iotype[i] == InoutType::Inlet) {
-			//				// interpolation
-			//				double p = 0;
-			//				double pmax = DBL_MIN;
-			//				double vcc = 0;
-			//#ifdef OMP_USE
-			//#pragma omp parallel for schedule (guided) reduction(+:p,vcc)
-			//#endif
-			//				for (int j = 0; j < ii->neiblist.size(); j++)
-			//				{
-			//					const int jj = particlesa.neiblist[i][j];
-			//					if (particlesa.iotype[i] == particlesa.iotype[jj]) continue;
-			//					const double mass_j = particlesa.mass[jj];
-			//					const double rho_j = particlesa.rho[jj];
-			//					const double p_k = particlesa.press[jj];
-			//					p += p_k * particlesa.bweight[i][j];
-			//					vcc += particlesa.bweight[i][j];					
-			//				}
-			//				p = vcc > 0.00000001 ? p / vcc : 0;				
-			//				particlesa.vcc[i] = vcc;
-			//				particlesa.press[i] = p; // inlet部分的压力是做的插值求得，按道理应该略大于右边粒子的压力，才会产生推的作用。
-			//				//particlesa.press[i] = 0;			
-			//			}
-			//			else
-						//inlet和outlet的压力应该单独设置
-			particlesa.press[i] = b * (pow(rhoi / rho0, gamma) - 1.0) + p_back;      // 流体区
-
-			if (particlesa.press[i] < p_back)
-				particlesa.press[i] = p_back;
-		}
 		this->updateWeight();
 
 		// boundary pressure and 速度     		
@@ -3021,7 +2969,7 @@ namespace sph {
 #endif
 		for (int i = 0; i < particles.size(); i++)
 		{
-			particle* ii = particles[i];
+			//particle* ii = particles[i];
 			if (particlesa.btype[i] != sph::BoundaryType::Boundary) continue;
 			//if (particlesa.iotype[i] == sph::InoutType::Buffer) continue;			
 			double p = 0, vcc = 0;
@@ -3065,8 +3013,8 @@ namespace sph {
 			//particle* ii = particles[i];
 
 			//if (particlesa.btype[i] == sph::BoundaryType::Boundary) continue;
-			const double rho_i = particlesa.rho[i];
-			const double hsml = particlesa.hsml[i];
+			//const double rho_i = particlesa.rho[i];
+			//const double hsml = particlesa.hsml[i];
 			const double xi = particlesa.x[i];
 			const double yi = particlesa.y[i];
 
