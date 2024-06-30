@@ -996,7 +996,7 @@ namespace sph {
 			this->adjustC0();
 			this->inlet();//给入口定压力，速度继承
 			this->outlet();//这里判断outlet粒子,等out粒子变到intlet粒子，就重新建近邻，温度也得初始化
-			//particlesa.shift2dev(particleNum());
+			particlesa.shift2dev(particleNum());
 			this->buildNeighb(true);
 			//this->buildNeighb0(true);
 			this->run(dt);
@@ -1770,22 +1770,8 @@ namespace sph {
 		const double dt = _dt;
 		const double dt2 = _dt * 0.5;
 
-#ifdef OMP_USE
-#pragma omp parallel for schedule (dynamic)
-#endif
-		for (int i = 0; i < particles.size(); i++)
-		{
-			//if (particles[i]->btype == sph::BoundaryType::Boundary) continue;
-			//particle* ii = particles[i];
-			/* code */
-			//(*i)->storeHalf();
-			particlesa.half_x[i] = particlesa.x[i];//i时刻的位置
-			particlesa.half_y[i] = particlesa.y[i];
-			particlesa.half_vx[i] = particlesa.vx[i];//i时刻的速度
-			particlesa.half_vy[i] = particlesa.vy[i];
-			particlesa.half_rho[i] = particlesa.rho[i];
-			particlesa.half_temperature[i] = particlesa.temperature[i];
-		}
+		run_half1_dev0(particleNum(), particlesa.half_x, particlesa.half_y, particlesa.half_vx, particlesa.half_vy, particlesa.half_rho, particlesa.half_temperature\
+										, particlesa.x, particlesa.y, particlesa.vx, particlesa.vy, particlesa.rho, particlesa.temperature);
 
 		//-------------predictor------------
 		this->single_step();
@@ -1793,39 +1779,18 @@ namespace sph {
 		//this->single_step_temperature();
 		//this->single_step_temperature_gaojie();
 		vmax = 0;
-#ifdef OMP_USE
-#pragma omp parallel for schedule (dynamic)
-#endif
-		for (int i = 0; i < particles.size(); i++)
-		{
-			/* code */
-			//particle* ii = particles[i];
-			//(*i)->integration1sthalf(dt2);
-			if (particlesa.btype[i] == sph::BoundaryType::Boundary) continue;
-			
-			if (particlesa.ftype[i] != sph::FixType::Fixed) {
-				particlesa.rho[i] = particlesa.half_rho[i] + particlesa.drho[i] * dt2;
-				particlesa.vx[i] = particlesa.half_vx[i] + particlesa.ax[i] * dt2;//(i+0.5*dt)时刻的速度
-				particlesa.vy[i] = particlesa.half_vy[i] + particlesa.ay[i] * dt2;
-				particlesa.vol[i] = particlesa.mass[i] / particlesa.rho[i];											
-				particlesa.temperature[i] = particlesa.half_temperature[i] + particlesa.temperature_t[i] * dt2;
-			}
-			particlesa.x[i] = particlesa.half_x[i] + particlesa.vx[i] * dt2;//-----------------------
-			 double y = particlesa.half_y[i] + particlesa.vy[i] * dt2;//加个判断，防止冲进边界
-			 /*if (y > indiameter * 0.5 - dp|| y < -indiameter * 0.5 + dp) {
-				 y = particlesa.half_y[i];
-			 }	*/		
-			particlesa.y[i] = y;
-			const double vx = particlesa.vx[i];
-			const double vy = particlesa.vy[i];
-			const double vel = sqrt(vx * vx + vy * vy);
-#pragma omp critical
-			if (vmax < vel)
-			{
-				vmax = vel;
-			}
 
-		}
+		double* d_vmax;
+		cudaMallocManaged(&d_vmax, sizeof(double));
+		*d_vmax = 0;
+
+		run_half2_dev0(particleNum(), particlesa.half_x, particlesa.half_y, particlesa.half_vx, particlesa.half_vy, particlesa.half_rho, particlesa.half_temperature\
+			, particlesa.x, particlesa.y, particlesa.vx, particlesa.vy, particlesa.rho, particlesa.temperature\
+			, particlesa.drho, particlesa.ax, particlesa.ay, particlesa.vol, particlesa.mass\
+			, particlesa.btype, particlesa.ftype, particlesa.temperature_t, dt2, d_vmax);
+
+		vmax = *d_vmax;
+
 
 		//-----------corrector--------------
 		this->single_step();
@@ -1838,7 +1803,7 @@ namespace sph {
 		for (int i = 0; i < particles.size(); i++)
 		{
 			/* code */
-			particle* ii = particles[i];
+			//particle* ii = particles[i];
 			//(*i)->integrationfull(dt);
 			//if (particlesa.btype[i] == sph::BoundaryType::Boundary) { particlesa.shift_c[i] = 0; continue; }
 
@@ -2993,9 +2958,9 @@ namespace sph {
 #endif
 		for (int i = 0; i < particles.size(); i++)
 		{
-			particle* ii = particles[i];  
+			//particle* ii = particles[i];  
 
-			if ((ii)->getBtype() != sph::BoundaryType::Boundary)   
+			if (particlesa.getBtype(i) != sph::BoundaryType::Boundary)   
 			{
 				if (particlesa.rho[i] < particlesa.rho_min[i])
 				{
@@ -3097,7 +3062,7 @@ namespace sph {
 #endif
 		for (int i = 0; i < particles.size(); i++)
 		{
-			particle* ii = particles[i];
+			//particle* ii = particles[i];
 
 			//if (particlesa.btype[i] == sph::BoundaryType::Boundary) continue;
 			const double rho_i = particlesa.rho[i];
@@ -3461,7 +3426,7 @@ namespace sph {
 #endif
 		for (int i = 0; i < particles.size(); i++)
 		{
-			particle* ii = particles[i];
+			//particle* ii = particles[i];
 
 			if (particlesa.btype[i] == sph::BoundaryType::Boundary) continue;
 			const double rho_i = particlesa.rho[i];
@@ -3470,7 +3435,7 @@ namespace sph {
 			const double xi = particlesa.x[i];
 			const double yi = particlesa.y[i];
 			const double c0 = particlesa.c0[i];
-			const double c = (ii)->c;
+			const double c = particlesa.c[i];
 			const double massi = particlesa.mass[i];			
 			//------kexi_force-------			
 			double temp_sigemax = 0;//动量方程中的T 
@@ -3555,7 +3520,7 @@ namespace sph {
 				double piv = 0;
 				const double cj = particlesa.c[jj];
 				const double vr = dvx * dx + dvy * dy;     //(Vj-Vi)(Rj-Ri)
-				const double mc = 0.5 * (cj + (ii)->c);
+				const double mc = 0.5 * (cj + particlesa.c[i]);
 				const double mrho = 0.5 * (rho_j + particlesa.rho[i]);				
 				if (vr < 0) {
 					muv = mhsml * vr / (r2 + mhsml * mhsml * 0.01);//FAI_ij
@@ -3567,17 +3532,17 @@ namespace sph {
 				avy += -massj * piv * particlesa.wMxijy[i][j];
 			}
 			
-			(ii)->fintx = temp_sigemax / rho_i;                
-			(ii)->finty = temp_sigemay / rho_i;
+			particlesa.fintx[i] = temp_sigemax / rho_i;
+			particlesa.finty[i] = temp_sigemay / rho_i;
 			//(ii)->turbx = turbx;// / particlesa.rho[i];
 			//(ii)->turby = turby;// / particlesa.rho[i];
-			(ii)->avx = avx;
-			(ii)->avy = avy;
+			particlesa.avx[i] = avx;
+			particlesa.avy[i] = avy;
 			//(ii)->avy = 0;							
 			if (particlesa.ftype[i] != sph::FixType::Fixed)//inlet粒子的加速度场为0，只有初始速度。outlet粒子呢？
 			{				
-				particlesa.ax[i] = (ii)->fintx + avx;
-				particlesa.ay[i] = (ii)->finty + avy;
+				particlesa.ax[i] = particlesa.fintx[i] + avx;
+				particlesa.ay[i] = particlesa.finty[i] + avy;
 				//particlesa.ay[i] = 0;
 				//particlesa.ax[i] = (ii)->fintx + avx + turbx + (ii)->replx;
 				//particlesa.ay[i] = (ii)->finty + avy + turby + (ii)->reply + gravity;				

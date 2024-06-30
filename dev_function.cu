@@ -312,6 +312,56 @@ __global__ void buildNeighb_dev3(unsigned int particleNum, double* X, double* Y,
 	}
 }
 
+__global__ void run_half1_dev1(unsigned int particleNum,double* half_x, double* half_y, double* half_vx, double* half_vy, double* half_rho, double* half_temperature\
+														,double* x, double* y, double* vx, double* vy, double* rho, double* temperature) {
+	for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < particleNum; i += gridDim.x * blockDim.x)
+	{
+		//if (particles[i]->btype == sph::BoundaryType::Boundary) continue;
+		//particle* ii = particles[i];
+		/* code */
+		//(*i)->storeHalf();
+		half_x[i] = x[i];//i时刻的位置
+		half_y[i] = y[i];
+		half_vx[i] = vx[i];//i时刻的速度
+		half_vy[i] = vy[i];
+		half_rho[i] = rho[i];
+		half_temperature[i] = temperature[i];
+	}
+}
+
+__global__ void run_half2_dev1(unsigned int particleNum, double* half_x, double* half_y, double* half_vx, double* half_vy, double* half_rho, double* half_temperature\
+														, double* x, double* y, double* vx, double* vy, double* rho, double* temperature\
+														, double* drho, double* ax, double *ay, double* vol, double* mass\
+														, sph::BoundaryType* btype, sph::FixType* ftype, double* temperature_t, const double dt2, double* vmax) {
+	double vel = 0;
+	for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < particleNum; i += gridDim.x * blockDim.x)
+	{
+		/* code */
+		//particle* ii = particles[i];
+		//(*i)->integration1sthalf(dt2);
+		if (btype[i] == sph::BoundaryType::Boundary) continue;
+
+		if (ftype[i] != sph::FixType::Fixed) {
+			rho[i] = half_rho[i] + drho[i] * dt2;
+			vx[i] = half_vx[i] + ax[i] * dt2;//(i+0.5*dt)时刻的速度
+			vy[i] = half_vy[i] + ay[i] * dt2;
+			vol[i] = mass[i] / rho[i];
+			temperature[i] = half_temperature[i] + temperature_t[i] * dt2;
+		}
+		x[i] = half_x[i] + vx[i] * dt2;//-----------------------
+		double Y = half_y[i] + vy[i] * dt2;//加个判断，防止冲进边界
+		/*if (y > indiameter * 0.5 - dp|| y < -indiameter * 0.5 + dp) {
+			y = half_y[i];
+		}	*/
+		y[i] = Y;
+		const double Vx = vx[i];
+		const double Vy = vy[i];
+		vel = vel<sqrt(Vx * Vx + Vy * Vy)? sqrt(Vx * Vx + Vy * Vy):vel;
+		
+	}
+	atomicMaxDouble(vmax, vel);
+}
+
 void getdt_dev0(unsigned int particleNum, double* dtmin, double* divvel, double* hsml, sph::FluidType* fltype, double vmax, double* Ax, double* Ay) {
 
 	getdt_dev<<<32,32>>>(particleNum, dtmin, divvel, hsml, fltype, vmax, Ax, Ay);
@@ -347,3 +397,29 @@ void buildNeighb_dev02(unsigned int particleNum, double* X, double* Y, unsigned 
 	buildNeighb_dev3 << <32, 32 >> > (particleNum, X, Y, neiblist, neibNum, Hsml, ngridx, ngridy, dxrange, dyrange, idx, iotype, xgcell, ygcell, celldata, grid_d, lengthofx);
 	CHECK(cudaDeviceSynchronize());
 }
+
+void run_half1_dev0(unsigned int particleNum, double* half_x, double* half_y, double* half_vx, double* half_vy, double* half_rho, double* half_temperature\
+	, double* x, double* y, double* vx, double* vy, double* rho, double* temperature) {
+	run_half1_dev1<<<32,32>>>(particleNum, half_x, half_y, half_vx, half_vy, half_rho, half_temperature, x, y, vx, vy, rho, temperature);
+	CHECK(cudaDeviceSynchronize());
+}
+
+void run_half2_dev0(unsigned int particleNum, double* half_x, double* half_y, double* half_vx, double* half_vy, double* half_rho, double* half_temperature\
+					, double* x, double* y, double* vx, double* vy, double* rho, double* temperature\
+					, double* drho, double* ax, double* ay, double* vol, double* mass\
+					, sph::BoundaryType* btype, sph::FixType* ftype, double* temperature_t, const double dt2, double* vmax) {
+
+	run_half2_dev1 << <32, 32 >> > (particleNum, half_x, half_y, half_vx, half_vy, half_rho, half_temperature\
+												, x, y, vx, vy, rho, temperature\
+												, drho, ax, ay, vol, mass\
+												, btype, ftype, temperature_t, dt2, vmax);
+	CHECK(cudaDeviceSynchronize());
+}
+
+
+
+
+
+
+
+

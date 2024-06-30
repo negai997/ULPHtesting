@@ -31,6 +31,14 @@ __global__ void buildNeighb_dev3(unsigned int particleNum, double* X, double* Y,
 	, const int ngridx, const int ngridy, const double dxrange, const double dyrange, unsigned int* idx, sph::InoutType* iotype\
 	, int* xgcell, int* ygcell, int* celldata, int* grid_d, double lengthofx);
 
+__global__ void run_half1_dev1(unsigned int particleNum, double* half_x, double* half_y, double* half_vx, double* half_vy, double* half_rho, double* half_temperature\
+	, double* x, double* y, double* vx, double* vy, double* rho, double* temperature);
+
+__global__ void run_half2_dev1(unsigned int particleNum, double* half_x, double* half_y, double* half_vx, double* half_vy, double* half_rho, double* half_temperature\
+	, double* x, double* y, double* vx, double* vy, double* rho, double* temperature\
+	, double* drho, double* ax, double* ay, double* vol, double* mass\
+	, sph::BoundaryType* btype, sph::FixType* ftype, double* temperature_t, const double dt2, double* vmax);
+
 void getdt_dev0(unsigned int particleNum, double* dtmin, double* divvel, double* hsml, sph::FluidType* fltype, double vmax, double* Ax, double* Ay);
 
 void adjustC0_dev0(double* c0, double c, unsigned int particleNum);
@@ -45,6 +53,13 @@ void buildNeighb_dev02(unsigned int particleNum, double* X, double* Y, unsigned 
 						, const int ngridx, const int ngridy, const double dxrange, const double dyrange, double x_min, double y_min\
 						, int* xgcell, int* ygcell, int* celldata, int* grid_d, const double* Hsml, unsigned int* idx, sph::InoutType* iotype, double lengthofx);
 
+void run_half1_dev0(unsigned int particleNum, double* half_x, double* half_y, double* half_vx, double* half_vy, double* half_rho, double* half_temperature\
+					, double* x, double* y, double* vx, double* vy, double* rho, double* temperature);
+
+void run_half2_dev0(unsigned int particleNum, double* half_x, double* half_y, double* half_vx, double* half_vy, double* half_rho, double* half_temperature\
+	, double* x, double* y, double* vx, double* vy, double* rho, double* temperature\
+	, double* drho, double* ax, double* ay, double* vol, double* mass\
+	, sph::BoundaryType* btype, sph::FixType* ftype, double* temperature_t, const double dt2, double* vmax);
 
 
 

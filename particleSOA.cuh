@@ -219,7 +219,24 @@ namespace sph {
 		cudaMemPrefetchAsync(neiblist, sizeof(unsigned int) * particleNum, deviceId, NULL);
 		for (int i = 0; i < particleNum; i++) 
 			cudaMemPrefetchAsync(neiblist[i], sizeof(unsigned int) * MAX_NEIB, deviceId, NULL);
-
+		/*
+			particlesa.half_x[i] = particlesa.x[i];//i时刻的位置
+			particlesa.half_y[i] = particlesa.y[i];
+			particlesa.half_vx[i] = particlesa.vx[i];//i时刻的速度
+			particlesa.half_vy[i] = particlesa.vy[i];
+			particlesa.half_rho[i] = particlesa.rho[i];
+			particlesa.half_temperature[i] = particlesa.temperature[i];
+		*/
+		cudaMemPrefetchAsync(vx, sizeof(double) * particleNum, deviceId, NULL);
+		cudaMemPrefetchAsync(vy, sizeof(double) * particleNum, deviceId, NULL);
+		cudaMemPrefetchAsync(rho, sizeof(double) * particleNum, deviceId, NULL);
+		cudaMemPrefetchAsync(temperature, sizeof(double) * particleNum, deviceId, NULL);
+		cudaMemPrefetchAsync(half_x, sizeof(double) * particleNum, deviceId, NULL);
+		cudaMemPrefetchAsync(half_y, sizeof(double) * particleNum, deviceId, NULL);
+		cudaMemPrefetchAsync(half_vx, sizeof(double) * particleNum, deviceId, NULL);
+		cudaMemPrefetchAsync(half_vy, sizeof(double) * particleNum, deviceId, NULL);
+		cudaMemPrefetchAsync(half_rho, sizeof(double) * particleNum, deviceId, NULL);
+		cudaMemPrefetchAsync(half_temperature, sizeof(double) * particleNum, deviceId, NULL);
 	}
 	
 
