@@ -1,6 +1,20 @@
 #pragma once
 
 namespace sph {
+	enum class Direction
+	{
+		Left = 0,
+		Right = 1
+	};
+
+	//None = 0,DivC = 1,Velc = 2
+	enum class ShiftingType
+	{
+		None = 0,
+		DivC = 1,
+		Velc = 2
+	};
+
 	enum class BoundaryType    //0为流体域，1为边界域
 	{
 		Bulk = 0,

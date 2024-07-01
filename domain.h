@@ -18,6 +18,7 @@
 #include <cfloat>
 #include <cmath>
 #include "particleSOA.cuh"
+#include "classes_type.h"
 
 
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32) && !defined(__CYGWIN__)
@@ -50,19 +51,20 @@ namespace sph {
 	const double temperature_max = 100;
 
 	//�涨������0����1��
-	enum class Direction
-	{
-		Left = 0,
-		Right = 1
-	};
+	//暂放入classes_type.h中
+	//enum class Direction
+	//{
+	//	Left = 0,
+	//	Right = 1
+	//};
 
-	//None = 0,DivC = 1,Velc = 2
-	enum class ShiftingType
-	{
-		None = 0,
-		DivC = 1,
-		Velc = 2
-	};
+	////None = 0,DivC = 1,Velc = 2
+	//enum class ShiftingType
+	//{
+	//	None = 0,
+	//	DivC = 1,
+	//	Velc = 2
+	//};
 
 	//���� ��domain
 	class domain
@@ -1390,35 +1392,39 @@ namespace sph {
 	//density_filter   
 	inline void domain::density_filter()
 	{
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided)
-#endif
-		for (int i = 0; i < particles.size(); i++)
-		{
-			//(*i)->density_filter();
-			//particle* ii = particles[i];
-			if (particlesa.btype[i] == sph::BoundaryType::Boundary) continue;
-			double beta0_mls = 0;
-			double rhop_sum_mls = 0;
-			const double hsml = particlesa.hsml[i];
 
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided) reduction(+:beta0_mls,rhop_sum_mls)
-#endif
-			for (int j = 0; j < particlesa.neibNum[i]; j++)
-			{
-				const int jj = particlesa.neiblist[i][j];
-				const double rho_j = (particlesa.press[jj] - particlesa.back_p[jj]) / particlesa.c0[jj] / particlesa.c0[jj] + particlesa.rho0[jj];
-				const double v_j = particlesa.mass[jj] / particlesa.rho[jj];
-				const double mass_j = rho_j * v_j;
-				beta0_mls += particlesa.bweight[i][j] * v_j;
-				rhop_sum_mls += particlesa.bweight[i][j] * mass_j;
-			}
+		density_filter_dev0(particleNum(), particlesa.btype, particlesa.hsml, particlesa.neibNum, particlesa.neiblist, particlesa.press\
+							, particlesa.back_p, particlesa.c0, particlesa.rho0, particlesa.mass, particlesa.rho, particlesa.bweight);
 
-			beta0_mls += sph::wfunc::factor(hsml, 2) * particlesa.mass[i] / particlesa.rho[i];
-			rhop_sum_mls += sph::wfunc::factor(hsml, 2) * particlesa.mass[i];
-			particlesa.rho[i] = rhop_sum_mls / beta0_mls;
-		}
+//#ifdef OMP_USE
+//#pragma omp parallel for schedule (guided)
+//#endif
+//		for (int i = 0; i < particles.size(); i++)
+//		{
+//			//(*i)->density_filter();
+//			//particle* ii = particles[i];
+//			if (particlesa.btype[i] == sph::BoundaryType::Boundary) continue;
+//			double beta0_mls = 0;
+//			double rhop_sum_mls = 0;
+//			const double hsml = particlesa.hsml[i];
+//
+//#ifdef OMP_USE
+//#pragma omp parallel for schedule (guided) reduction(+:beta0_mls,rhop_sum_mls)
+//#endif
+//			for (int j = 0; j < particlesa.neibNum[i]; j++)
+//			{
+//				const int jj = particlesa.neiblist[i][j];
+//				const double rho_j = (particlesa.press[jj] - particlesa.back_p[jj]) / particlesa.c0[jj] / particlesa.c0[jj] + particlesa.rho0[jj];
+//				const double v_j = particlesa.mass[jj] / particlesa.rho[jj];
+//				const double mass_j = rho_j * v_j;
+//				beta0_mls += particlesa.bweight[i][j] * v_j;
+//				rhop_sum_mls += particlesa.bweight[i][j] * mass_j;
+//			}
+//
+//			beta0_mls += sph::wfunc::factor(hsml, 2) * particlesa.mass[i] / particlesa.rho[i];
+//			rhop_sum_mls += sph::wfunc::factor(hsml, 2) * particlesa.mass[i];
+//			particlesa.rho[i] = rhop_sum_mls / beta0_mls;
+//		}
 	}
 	//temperature_filter
 	inline void domain::temperature_filter()
@@ -1802,49 +1808,10 @@ namespace sph {
 		//this->single_step0();
 		//this->single_step_temperature();
 		//this->single_step_temperature_gaojie();//已经运动了半步了		
-#ifdef OMP_USE
-#pragma omp parallel for schedule (dynamic)
-#endif
-		for (int i = 0; i < particles.size(); i++)
-		{
-			/* code */
-			//particle* ii = particles[i];
-			//(*i)->integrationfull(dt);
-			//if (particlesa.btype[i] == sph::BoundaryType::Boundary) { particlesa.shift_c[i] = 0; continue; }
 
-			if (particlesa.ftype[i] != sph::FixType::Fixed) {
-				particlesa.rho[i] = particlesa.half_rho[i] + particlesa.drho[i] * dt;//i时刻的密度+(i+0.5*dt)时刻的密度变化率×dt			 
-				particlesa.vx[i] = particlesa.half_vx[i] + particlesa.ax[i] * dt;//i时刻的速度+(i+0.5*dt)时刻的加速度×dt
-				particlesa.vy[i] = particlesa.half_vy[i] + particlesa.ay[i] * dt;
-				particlesa.vol[i] = particlesa.mass[i] / particlesa.rho[i];				
-				particlesa.x[i] = particlesa.half_x[i] + particlesa.vx[i] * dt;//i时刻的位置+(i+*dt)时刻的速度×dt---------------------
-				//particlesa.y[i] = particlesa.half_y[i] + particlesa.vy[i] * dt;
-				double y = particlesa.half_y[i] + particlesa.vy[i] * dt;//加个判断，防止冲进边界
-				/*if (y > indiameter * 0.5 - dp || y < -indiameter * 0.5 + dp) {
-					y = particlesa.half_y[i];
-				}*/				
-				particlesa.y[i] = y;
-				particlesa.ux[i] += particlesa.vx[i] * dt;
-				particlesa.uy[i] += particlesa.vy[i] * dt;
-				particlesa.temperature[i] = particlesa.half_temperature[i] + particlesa.temperature_t[i] * dt;
-			}			
-			if (stype != ShiftingType::DivC) continue;
-
-			double shift_c = 0;
-
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided) reduction(+:shift_c)
-#endif
-
-			for (int j = 0; j < particlesa.neibNum[i]; j++)
-			{
-				const int jj = particlesa.neiblist[i][j];
-				const double rho_j = particlesa.rho[jj];
-				const double massj = particlesa.mass[jj];
-				shift_c += particlesa.bweight[i][j] * massj / rho_j;
-			}
-			particlesa.shift_c[i] = shift_c;
-		}
+		run_half3Nshiftc_dev0(particleNum(), particlesa.ftype, particlesa.rho, particlesa.half_rho, particlesa.drho, dt, particlesa.vx, particlesa.half_vx, particlesa.ax\
+			, particlesa.vy, particlesa.half_vy, particlesa.ay, particlesa.vol, particlesa.mass, particlesa.x, particlesa.half_x, particlesa.half_y, particlesa.y, particlesa.ux, particlesa.uy\
+			, particlesa.temperature, particlesa.half_temperature, particlesa.temperature_t, stype, particlesa.neibNum, particlesa.neiblist, particlesa.bweight, particlesa.shift_c);
 
 		//this->updateBufferPos(dt);
 		//this->updateGhostPos();
@@ -1855,128 +1822,29 @@ namespace sph {
 			//(*i)->shifting_c();
 		//}
 
+		double* drmax_d;
+		double* drmax2_d;
+		int* lock;
+		cudaMallocManaged(&drmax_d, sizeof(double));
+		cudaMallocManaged(&drmax2_d, sizeof(double));
+		cudaMallocManaged(&lock, sizeof(int));
+
 		if (stype == ShiftingType::None) return;
 
 		if (stype == ShiftingType::DivC) {
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided)
-#endif
-			for (int i = 0; i < particles.size(); i++)
-			{
-				/* code */
-				//particle* ii = particles[i];
-				//(*i)->shifting(dt);
-				if (particlesa.btype[i] == sph::BoundaryType::Boundary) continue;
-				//if (particlesa.ftype[i] != sph::FixType::Free) continue;
-				const double hsml = particlesa.hsml[i];
-				const double conc = particlesa.shift_c[i];
 
-				double shift_x = 0;
-				double shift_y = 0;
+			run_shifttype_divc_dev0(particleNum(), particlesa.btype, particlesa.hsml, particlesa.shift_c, particlesa.neibNum, particlesa.neiblist, particlesa.mass\
+				, particlesa.rho, particlesa.dbweightx, particlesa.dbweighty, particlesa.vx, particlesa.vy, shiftingCoe, dt, dp, particlesa.shift_x, particlesa.shift_y\
+				, particlesa.x, particlesa.y, particlesa.ux, particlesa.uy, drmax_d, drmax2_d, lock);
 
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided) reduction(+:shift_x,shift_y)
-#endif
-				for (int j = 0; j < particlesa.neibNum[i]; j++)
-				{
-					const int jj = particlesa.neiblist[i][j];
-					const double mhsml = (hsml + particlesa.hsml[jj]) * 0.5;
-					const double conc_ij = particlesa.shift_c[jj] - conc;
-
-					shift_x += conc_ij * particlesa.mass[jj] / particlesa.rho[jj] * particlesa.dbweightx[i][j];
-					shift_y += conc_ij * particlesa.mass[jj] / particlesa.rho[jj] * particlesa.dbweighty[i][j];
-				}
-				const double vx = particlesa.vx[i];
-				const double vy = particlesa.vy[i];
-				const double vel = sqrt(vx * vx + vy * vy);
-				shift_x *= -2.0 * dp * vel * dt * shiftingCoe;
-				shift_y *= -2.0 * dp * vel * dt * shiftingCoe;
-
-				particlesa.shift_x[i] = shift_x;
-				particlesa.shift_y[i] = shift_y;
-
-				particlesa.x[i] += shift_x;
-				particlesa.y[i] += shift_y;
-				particlesa.ux[i] += shift_x;
-				particlesa.uy[i] += shift_y;
-
-				const double ux = particlesa.ux[i];
-				const double uy = particlesa.uy[i];
-				const double disp = sqrt(ux * ux + uy * uy);
-#pragma omp critical
-				{
-					if (disp > drmax) {
-						drmax = disp;
-						drmax2 = drmax;
-					}
-					else if (disp > drmax2) {
-						drmax2 = disp;
-					}
-				}
-			}
 		}
 		else if (stype == ShiftingType::Velc) {
 			const double bweightdx = sph::wfunc::bweight(1.0, dp, 2);
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided)
-#endif
-			for (int i = 0; i < particles.size(); i++)
-			{
-				/* code */
-				//particle* ii = particles[i];
-				//(*i)->shifting(dt);
-				if (particlesa.btype[i] == sph::BoundaryType::Boundary) continue;
-				//if (particlesa.ftype[i] != sph::FixType::Free) continue;
-				const double hsml = particlesa.hsml[i];
-				const double rho_i = particlesa.rho[i];
-				const double c0 = particlesa.c0[i];
 
-				double shift_x = 0;
-				double shift_y = 0;
+			run_shifttype_velc_dev1(particleNum(), particlesa.btype, particlesa.hsml, particlesa.rho, particlesa.c0, particlesa.neibNum, particlesa.neiblist\
+				, particlesa.bweight, bweightdx, particlesa.mass, particlesa.dbweightx, particlesa.dbweighty, particlesa.vx, particlesa.vy, dp, shiftingCoe\
+				, particlesa.shift_x, particlesa.shift_y, particlesa.x, particlesa.y, particlesa.ux, particlesa.uy, drmax_d, drmax2_d, lock);
 
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided) reduction(+:shift_x,shift_y)
-#endif
-				for (int j = 0; j < particlesa.neibNum[i]; j++)
-				{
-					const int jj = particlesa.neiblist[i][j];
-					const double frac = particlesa.bweight[i][j] / bweightdx;
-					const double head = 1.0 + 0.2 * pow(frac, 4);
-					const double rho_j = particlesa.rho[jj];
-					const double rho_ij = rho_i + rho_j;
-					const double mass_j = particlesa.mass[jj];
-
-					shift_x += head * particlesa.dbweightx[i][j] * mass_j / rho_ij;
-					shift_y += head * particlesa.dbweighty[i][j] * mass_j / rho_ij;
-				}
-				const double vx = particlesa.vx[i];
-				const double vy = particlesa.vy[i];
-				const double vel = sqrt(vx * vx + vy * vy);
-				shift_x *= -8.0 * dp * dp * vel / c0 * shiftingCoe;
-				shift_y *= -8.0 * dp * dp * vel / c0 * shiftingCoe;
-
-				particlesa.shift_x[i] = shift_x;
-				particlesa.shift_y[i] = shift_y;
-
-				particlesa.x[i] += shift_x;
-				particlesa.y[i] += shift_y;
-				particlesa.ux[i] += shift_x;
-				particlesa.uy[i] += shift_y;
-
-				const double ux = particlesa.ux[i];
-				const double uy = particlesa.uy[i];
-				const double disp = sqrt(ux * ux + uy * uy);
-#pragma omp critical
-				{
-					if (disp > drmax) {
-						drmax = disp;
-						drmax2 = drmax;
-					}
-					else if (disp > drmax2) {
-						drmax2 = disp;
-					}
-				}
-			}
 		}
 	}
 	//求解温度、运动
@@ -2963,539 +2831,46 @@ namespace sph {
 
 		this->updateWeight();
 
-		// boundary pressure and 速度     		
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided)
-#endif
-		for (int i = 0; i < particles.size(); i++)
-		{
-			//particle* ii = particles[i];
-			if (particlesa.btype[i] != sph::BoundaryType::Boundary) continue;
-			//if (particlesa.iotype[i] == sph::InoutType::Buffer) continue;			
-			double p = 0, vcc = 0;
-			double v_x = 0, v_y = 0;
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided) reduction(+:p,vcc,v_x,v_y)
-#endif
-			for (int j = 0; j < particlesa.neibNum[i]; j++)
-			{
-				const int jj = particlesa.neiblist[i][j];
-				//if (particlesa.btype[i] == particlesa.btype[jj]) continue;//Buffer粒子也在这里，导致流出边界固壁的压力不正常
-				if (particlesa.ftype[jj] == sph::FixType::Fixed) continue;//其他固壁粒子不参与，ghost不参与，buffer参与
-				const double mass_j = particlesa.mass[jj];
-				const double rho_j = particlesa.rho[jj];
-				const double p_k = particlesa.press[jj];
-				p += p_k * particlesa.bweight[i][j];//
-				vcc += particlesa.bweight[i][j];
-				v_x += particlesa.vx[jj] * particlesa.bweight[i][j];//需要将速度沿法线分解，还没分
-				v_y += particlesa.vy[jj] * particlesa.bweight[i][j];
-			}
-			p = vcc > 0.00000001 ? p / vcc : 0;//p有值
-			v_x = vcc > 0.00000001 ? v_x / vcc : 0;//v_x一直为0！待解决
-			v_y = vcc > 0.00000001 ? v_y / vcc : 0;
-			double vx0 = 0;
-			double vy0 = 0;
-			particlesa.vcc[i] = vcc;
-			particlesa.press[i] = p;
-			particlesa.vx[i] = 2.0*vx0 - v_x;//无滑移，要改成径向，切向
-			particlesa.vy[i] = 2.0*vy0 - v_y;
-					
-		}
+		// boundary pressure and 速度    
+
+		singlestep_boundryPNV_dev0(particleNum(), particlesa.btype, particlesa.neibNum, particlesa.neiblist, particlesa.ftype, particlesa.mass, particlesa.rho, particlesa.press\
+									, particlesa.bweight, particlesa.vx, particlesa.vy, particlesa.vcc);
+
 		//this->updateGhostInfo();
 		//this->Ghost2bufferInfo();
 
 		//shap matrix
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided)
-#endif
-		for (int i = 0; i < particles.size(); i++)
-		{
-			//particle* ii = particles[i];
 
-			//if (particlesa.btype[i] == sph::BoundaryType::Boundary) continue;
-			//const double rho_i = particlesa.rho[i];
-			//const double hsml = particlesa.hsml[i];
-			const double xi = particlesa.x[i];
-			const double yi = particlesa.y[i];
-
-			double k_11 = 0;//K
-			double k_12 = 0;
-			double k_21 = 0;
-			double k_22 = 0;
-			double m_11 = 0;
-			double m_12 = 0;
-			double m_21 = 0;
-			double m_22 = 0;
-
-			//k
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided) reduction(+:k_11,k_12,k_21,k_22)
-#endif
-			for (int j = 0; j < particlesa.neibNum[i]; j++)
-			{
-				const int jj = particlesa.neiblist[i][j];
-				if (particlesa.bweight[i][j] < 0.000000001) continue;
-				const double xj = particlesa.x[jj];
-				const double yj = particlesa.y[jj];
-				double dx = xj - xi;
-				double dy = yj - yi;
-				if (particlesa.iotype[i] == InoutType::Inlet && particlesa.iotype[jj] == InoutType::Outlet)
-				{
-					dx = particlesa.x[jj] - particlesa.x[i] - lengthofx;//xi(1)
-				}
-				if (particlesa.iotype[i] == InoutType::Outlet && particlesa.iotype[jj] == InoutType::Inlet)
-				{
-					dx = particlesa.x[jj] - particlesa.x[i] + lengthofx;//xi(1)
-				}
-				const double rho_j = particlesa.rho[jj];
-				const double massj = particlesa.mass[jj];
-				k_11 += dx * dx * massj / rho_j * particlesa.bweight[i][j];	//k11
-				k_12 += dx * dy * massj / rho_j * particlesa.bweight[i][j];//k_12=k_21
-				k_21 += dy * dx * massj / rho_j * particlesa.bweight[i][j];
-				k_22 += dy * dy * massj / rho_j * particlesa.bweight[i][j];
-			}
-			const double det = k_11 * k_22 - k_12 * k_21;
-			m_11 = k_22 / det;
-			m_12 = -k_12 / det;
-			m_21 = -k_21 / det;
-			m_22 = k_11 / det;
-			particlesa.m_11[i] = m_11;//k矩阵求逆
-			particlesa.m_12[i] = m_12;
-			particlesa.m_21[i] = m_21;
-			particlesa.m_22[i] = m_22;    			
-		}
+		singlestep_shapeMatrix_dev0(particleNum(), particlesa.rho, particlesa.x, particlesa.y, particlesa.neibNum, particlesa.neiblist, particlesa.bweight\
+										, particlesa.iotype, lengthofx, particlesa.mass, particlesa.m_11, particlesa.m_12, particlesa.m_21, particlesa.m_22);
 
 
 		// density
 		const double chi = 0.2;
 
 		// boundary viscosity due to no-slip condition 对边界的计算，算了边界的黏性力、湍流力
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided)
-#endif
-		for (int i = 0; i < particles.size(); i++)
-		{
-			particle* ii = particles[i];
-			if (particlesa.btype[i] != sph::BoundaryType::Boundary) continue;
-			const double rho_i = particlesa.rho[i];
-			const double hsml = particlesa.hsml[i];
-			const double xi = particlesa.x[i];
-			const double yi = particlesa.y[i];
 
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided)
-#endif
-			//--------wMxij-------
-			for (int j = 0; j < particlesa.neibNum[i]; j++)
-			{
-				const int jj = particlesa.neiblist[i][j];
-				if (particlesa.bweight[i][j] < 0.000000001) continue;
-				const double xj = particlesa.x[jj];
-				const double yj = particlesa.y[jj];
-				double dx = xj - xi;
-				double dy = yj - yi;
-				if (particlesa.iotype[i] == InoutType::Inlet && particlesa.iotype[jj] == InoutType::Outlet)
-				{
-					dx = particlesa.x[jj] - particlesa.x[i] - lengthofx;//xi(1)
-				}
-				if (particlesa.iotype[i] == InoutType::Outlet && particlesa.iotype[jj] == InoutType::Inlet)
-				{
-					dx = particlesa.x[jj] - particlesa.x[i] + lengthofx;//xi(1)
-				}
-				particlesa.wMxijx[i][j] = (particlesa.m_11[i] * dx + particlesa.m_12[i] * dy) * particlesa.bweight[i][j];
-				particlesa.wMxijy[i][j] = (particlesa.m_21[i] * dx + particlesa.m_22[i] * dy) * particlesa.bweight[i][j];
-			}
-			//if (particlesa.btype[i] != sph::BoundaryType::Boundary) continue;
-
-			double epsilon_2_11 = 0;
-			double epsilon_2_12 = 0;
-			double epsilon_2_21 = 0;
-			double epsilon_2_22 = 0;     //=dudx11
-			//double epsilon_3 = 0;
-			double epsilon_dot11 = 0;
-			double epsilon_dot12 = 0;
-			double epsilon_dot21 = 0;
-			double epsilon_dot22 = 0;			
-			const double p_i = particlesa.press[i];
-
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided) reduction(+:epsilon_2_11,epsilon_2_12,epsilon_2_21,epsilon_2_22)
-#endif
-			for (int j = 0; j < particlesa.neibNum[i]; j++)
-			{
-				const int jj = particlesa.neiblist[i][j];
-				if (particlesa.btype[jj] == sph::BoundaryType::Boundary) continue;
-				if (particlesa.bweight[i][j] < 0.000000001) continue;
-				const double xj = particlesa.x[jj];
-				const double yj = particlesa.y[jj];
-				double dx = xj - xi;
-				double dy = yj - yi;
-				if (particlesa.iotype[i] == InoutType::Inlet && particlesa.iotype[jj] == InoutType::Outlet)
-				{
-					dx = particlesa.x[jj] - particlesa.x[i] - lengthofx;//xi(1)
-				}
-				if (particlesa.iotype[i] == InoutType::Outlet && particlesa.iotype[jj] == InoutType::Inlet)
-				{
-					dx = particlesa.x[jj] - particlesa.x[i] + lengthofx;//xi(1)
-				}
-				const double r2 = dx * dx + dy * dy;
-				const double rho_j = particlesa.rho[jj];
-				const double rho_ij = rho_j - rho_i;
-				const double diffx = rho_ij * dx / r2;
-				const double diffy = rho_ij * dx / r2;
-				//const double dvx = particlesa.vx[jj] - ((ii)->bctype == BoundaryConditionType::NoSlip ? particlesa.vx[i] : 0);
-				//const double dvy = particlesa.vy[jj] - ((ii)->bctype == BoundaryConditionType::NoSlip ? particlesa.vy[i] : 0);
-				const double dvx = particlesa.vx[jj] - particlesa.vx[i];
-				const double dvy = particlesa.vy[jj] - particlesa.vy[i];
-				const double massj = particlesa.mass[jj];								
-				epsilon_2_11 += dvx * particlesa.wMxijx[i][j] * massj / rho_j;//du/dx
-				epsilon_2_12 += dvx * particlesa.wMxijy[i][j] * massj / rho_j;//du/dy
-				epsilon_2_21 += dvy * particlesa.wMxijx[i][j] * massj / rho_j;//dv/dx
-				epsilon_2_22 += dvy * particlesa.wMxijy[i][j] * massj / rho_j;//dv/dy			
-			}//end circle j
-
-			 //epsilon_second= -1./3.* epsilon_3;//*��λ����
-
-				//epsilon_temp(11)= epsilon_2(11) * particlesa.m_11[i] + epsilon_2(12) * particlesa.m_21[i];
-				//epsilon_temp(12)= epsilon_2(11) * particlesa.m_12[i] + epsilon_2(12) * particlesa.m_22[i];
-				//epsilon_temp(21)= epsilon_2(21) * particlesa.m_11[i] + epsilon_2(22) * particlesa.m_21[i];
-				//epsilon_temp(22)= epsilon_2(21) * particlesa.m_12[i] + epsilon_2(22) * particlesa.m_22[i];
-
-				//epsilon_dot=0.5*(epsilon_temp+transpose(epsilon_temp))+epsilon_second  !�ܵ�epsilon,����������ȣ�û��epsilon_second
-			epsilon_dot11 = epsilon_2_11;
-			epsilon_dot12 = 0.5 * (epsilon_2_12 + epsilon_2_21);
-			epsilon_dot21 = epsilon_dot12;
-			epsilon_dot22 = epsilon_2_22;
-			//边界粒子的物理黏性项tau： 比较重要！
-			particlesa.tau11[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot11;//边界粒子的黏性力
-			particlesa.tau12[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot12;
-			particlesa.tau21[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot21;
-			particlesa.tau22[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot22;
-
-			//double dist = 0;
-			//const double y1 = indiameter;//height
-			//const double R = sqrt((xi - 0.2 * y1) * (xi - 0.2 * y1) + yi * yi) - 3 * 0.004;//粒子距圆柱的距离
-			//const double L1 = 0.5 * y1 - abs(yi);
-			////const double L1 = abs(0.5 * y1 - yi);
-			//const double L2 = std::min(xi + 0.08, inlen - xi);
-			////const double L2 = abs(yi - 0.5 * y1);
-			//double temp = std::min(R, L1);//dwall
-			//dist = std::min(temp, L2);
-			//if (dist < 0) {
-			//	dist = 0;
-			//}
-
-			const double dvdx11 = epsilon_2_11;          // dudx11=epsilon_dot11
-			const double dvdx12 = 0.5 * (epsilon_2_12 + epsilon_2_21);
-			const double dvdx21 = dvdx12;
-			const double dvdx22 = epsilon_2_22;
-			const double s1ij = sqrt(2.0 * (dvdx11 * dvdx11 + dvdx12 * dvdx12 + dvdx21 * dvdx21 + dvdx22 * dvdx22));
-
-			const double mut = dp * dp * C_s * C_s * s1ij;
-			//const double kenergy = C_v / C_e * dp * dp * s1ij * s1ij;    //Ksps=K_turb
-			const double kenergy = (particlesa.vx[i] * particlesa.vx[i] + particlesa.vy[i] * particlesa.vy[i]) * 0.5;
-			particlesa.turb11[i] = 2.0 * mut * dvdx11 * rho_i - 2.0 / 3.0 * kenergy * rho_i;//����tao= ( 2*Vt*Sij-2/3Ksps*�����˺��� )*rho_i// �൱��turbulence(:,:,i)
-			particlesa.turb12[i] = 2.0 * mut * dvdx12 * rho_i;
-			particlesa.turb21[i] = 2.0 * mut * dvdx21 * rho_i;
-			particlesa.turb22[i] = 2.0 * mut * dvdx22 * rho_i - 2.0 / 3.0 * kenergy * rho_i;
-		}//end circle i
+		singlestep_boundaryVisc_dev0(particleNum(), particlesa.btype, particlesa.rho, particlesa.hsml, particlesa.x, particlesa.y, particlesa.neibNum, particlesa.neiblist\
+			, particlesa.bweight, particlesa.iotype, lengthofx, particlesa.wMxijx, particlesa.wMxijy, particlesa.m_11, particlesa.m_21, particlesa.m_12, particlesa.m_22\
+			, particlesa.press, particlesa.vx, particlesa.vy, particlesa.mass, particlesa.tau11, particlesa.tau12, particlesa.tau21, particlesa.tau22, particlesa.fltype\
+			, dp, C_s, particlesa.turb11, particlesa.turb12, particlesa.turb21, particlesa.turb22);
 
 		// for fluid particles（包括inlet）
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided)
-#endif
-		for (int i = 0; i < particles.size(); i++)
-		{
-			particle* ii = particles[i];
 
-			if (particlesa.btype[i] == sph::BoundaryType::Boundary) continue;
-			const double rho_i = particlesa.rho[i];
-			const double hsml = particlesa.hsml[i];
-			const double xi = particlesa.x[i];
-			const double yi = particlesa.y[i];
-			
-			//---------速度算子----			
-			double epsilon_2_11 = 0;
-			double epsilon_2_12 = 0;
-			double epsilon_2_21 = 0;
-			double epsilon_2_22 = 0;     //=dudx11			
-			const double p_i = particlesa.press[i];
-			
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided)
-#endif
-//--------wMxij-------
-			for (int j = 0; j < particlesa.neibNum[i]; j++)
-			{
-				const int jj = particlesa.neiblist[i][j];
-				if (particlesa.bweight[i][j] < 0.000000001) continue;
-				const double xj = particlesa.x[jj];
-				const double yj = particlesa.y[jj];
-				double dx = xj - xi;
-				double dy = yj - yi;
-				//周期边界
-				if (particlesa.iotype[i] == InoutType::Inlet && particlesa.iotype[jj] == InoutType::Outlet)
-				{
-					dx = particlesa.x[jj] - particlesa.x[i] - lengthofx;//xi(1)
-				}
-				if (particlesa.iotype[i] == InoutType::Outlet && particlesa.iotype[jj] == InoutType::Inlet)
-				{
-					dx = particlesa.x[jj] - particlesa.x[i] + lengthofx;;//xi(1)
-				}
+		singlestep_fluidVisc_dev0(particleNum(), particlesa.btype, particlesa.rho, particlesa.hsml, particlesa.x, particlesa.y, particlesa.press, particlesa.neibNum\
+			, particlesa.neiblist, particlesa.bweight, particlesa.iotype, lengthofx, particlesa.wMxijx, particlesa.wMxijy\
+			, particlesa.m_11, particlesa.m_12, particlesa.m_21, particlesa.m_22, particlesa.vx, particlesa.vy, particlesa.mass, particlesa.divvel\
+			, particlesa.fltype, particlesa.tau11, particlesa.tau12, particlesa.tau21, particlesa.tau22, particlesa.vort, dp, C_s\
+			, particlesa.turb11, particlesa.turb12, particlesa.turb21, particlesa.turb22, particlesa.ftype, particlesa.drho);
 
-				particlesa.wMxijx[i][j] = (particlesa.m_11[i] * dx + particlesa.m_12[i] * dy) * particlesa.bweight[i][j];
-				particlesa.wMxijy[i][j] = (particlesa.m_21[i] * dx + particlesa.m_22[i] * dy) * particlesa.bweight[i][j];
-			}
-
-
-
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided) reduction(+:epsilon_2_11,epsilon_2_12,epsilon_2_21,epsilon_2_22)
-#endif
-			for (int j = 0; j < particlesa.neibNum[i]; j++)
-			{
-				const int jj = particlesa.neiblist[i][j];
-				if (particlesa.bweight[i][j] < 0.000000001) continue;
-				const double xj = particlesa.x[jj];
-				const double yj = particlesa.y[jj];
-				double dx = xj - xi;
-				double dy = yj - yi;
-				if (particlesa.iotype[i] == InoutType::Inlet && particlesa.iotype[jj] == InoutType::Outlet)
-				{
-					dx = particlesa.x[jj] - particlesa.x[i] - lengthofx;//xi(1)
-				}
-				if (particlesa.iotype[i] == InoutType::Outlet && particlesa.iotype[jj] == InoutType::Inlet)
-				{
-					dx = particlesa.x[jj] - particlesa.x[i] + lengthofx;//xi(1)
-				}
-				const double r2 = dx * dx + dy * dy;
-				const double rho_j = particlesa.rho[jj];
-				const double rho_ij = rho_j - rho_i;
-				const double diffx = rho_ij * dx / r2;
-				const double diffy = rho_ij * dy / r2;
-				const double dvx = particlesa.vx[jj] - particlesa.vx[i];
-				const double dvy = particlesa.vy[jj] - particlesa.vy[i];
-				const double massj = particlesa.mass[jj];				
-				//---------density---------- 				
-				//---------repulsive--------F_ab
-				//if (particlesa.fltype[i] != particlesa.fltype[jj]) {
-				//	const double r = sqrt(r2);
-				//	const double ch = 1.0 - r / hsml;
-				//	const double eta = 2.0 - r / hsml;
-				//	double f_eta;
-				//	if (eta > 2.0) {
-				//		f_eta = 0;
-				//	}
-				//	else if (eta < 2.0 / 3.0) {
-				//		f_eta = 2.0 / 3.0;
-				//	}
-				//	else if (eta <= 1.0) {
-				//		f_eta = 2.0 * eta - 1.5 * eta * eta;
-				//	}
-				//	else {
-				//		f_eta = 0.5 * (2.0 - eta) * (2.0 - eta);
-				//	}
-				//	const double c0 = particlesa.c0[i];
-				//	//�໥��������ʽ����F_ab��
-				//	replx += -0.01 * c0 * c0 * ch * f_eta * dx / r2 * particlesa.mass[i];
-				//	reply += -0.01 * c0 * c0 * ch * f_eta * dy / r2 * particlesa.mass[i];
-				//}
-				//----------internal force--------								
-				epsilon_2_11 += dvx * particlesa.wMxijx[i][j] * massj / rho_j;//du/dx
-				epsilon_2_12 += dvx * particlesa.wMxijy[i][j] * massj / rho_j;//du/dy
-				epsilon_2_21 += dvy * particlesa.wMxijx[i][j] * massj / rho_j;//dv/dx
-				epsilon_2_22 += dvy * particlesa.wMxijy[i][j] * massj / rho_j;//dv/dy				
-			}//end circle j
-			//-----------------------------速度散度			
-			particlesa.divvel[i] = epsilon_2_11 + epsilon_2_22;//弱可压缩，散度应该不会很大		
-			//epsilon_dot11 = epsilon_2_11 * particlesa.m_11[i] + epsilon_2_12 * particlesa.m_21[i] - 1. / 3. * epsilon_3;
-			//epsilon_dot12 = ((epsilon_2_11 * particlesa.m_12[i] + epsilon_2_12 * particlesa.m_22[i]) + (epsilon_2_21 * particlesa.m_11[i] + epsilon_2_22 * particlesa.m_21[i])) * 0.5 + 0;
-			//epsilon_dot21 = epsilon_dot12;
-			//epsilon_dot22 = epsilon_2_21 * particlesa.m_12[i] + epsilon_2_22 * particlesa.m_22[i] - 1. / 3. * epsilon_3;
-			////黏性力tau = 2.0* 动力黏度* 剪切应变率张量
-			//particlesa.tau11[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot11;
-			//particlesa.tau12[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot12;
-			//particlesa.tau21[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot21;
-			//particlesa.tau22[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_dot22;
-			//-----------------------------黏性应力
-			//对于不可压缩：黏性切应力 = 2. * sph::Fluid::Viscosity(particlesa.fltype[i])* 应变
-			//应变为:[ du/dx 0.5*(du/dy+dv/dx) 0.5*(du/dy+dv/dx) dv/dy ]
-			particlesa.tau11[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_2_11;//这里的tau11代表速度的偏导
-			particlesa.tau12[i] = sph::Fluid::Viscosity(particlesa.fltype[i]) * (epsilon_2_12 + epsilon_2_21);//
-			particlesa.tau21[i] = particlesa.tau12[i];//
-			particlesa.tau22[i] = 2. * sph::Fluid::Viscosity(particlesa.fltype[i]) * epsilon_2_22;//
-			//-----------------------------涡量 W=0.5(dudy-dvdx)    应变率张量（正应力张量）: S=0.5(dudx+dvdy) divvel
-			double vort = 0.5 * (epsilon_2_12 - epsilon_2_21);
-			//particlesa.vort[i] = (epsilon_2_21 - epsilon_2_12);
-			//运用Q准则 Q=0.5*(sqrt(W)-sqrt(S))
-			//particlesa.vort[i] =0.5* (vort* vort - (0.5* particlesa.divvel[i])* (0.5 * particlesa.divvel[i]));
-			particlesa.vort[i] = vort;
-			//-----------------------------湍流应力
-			//double dist = 0;
-			//const double y1 = indiameter;//height
-			//const double R = sqrt((xi - 0.2 * y1) * (xi - 0.2 * y1) + yi * yi) - 3 * 0.004;//粒子距圆柱的距离
-			//const double L1 = 0.5 * y1 - abs(yi);
-			////const double L1 = abs(0.5 * y1 - yi);
-			//const double L2 = std::min(xi + 0.08, inlen - xi);
-			////const double L2 = abs(yi - 0.5 * y1);
-			//double temp = std::min(R, L1);//dwall
-			//dist = std::min(temp, L2);
-			//if (dist < 0) {
-			//	dist = 0;
-			//}			
-			const double dvdx11 = epsilon_2_11;
-			const double dvdx12 = (epsilon_2_21 + epsilon_2_12) * 0.5;
-			const double dvdx21 = dvdx12;
-			const double dvdx22 = epsilon_2_22;
-			const double s1ij = sqrt(2.0 * (dvdx11 * dvdx11 + dvdx12 * dvdx12 + dvdx21 * dvdx21 + dvdx22 * dvdx22));
-			//const double mut = std::min(dist * dist * karman * karman, dp * dp * C_s * C_s) * s1ij;//mut=Vt:the turbulence eddy viscosity
-			const double mut = dp * dp * C_s * C_s * s1ij;
-			//const double kenergy = C_v / C_e * dp * dp * s1ij * s1ij; //Ksps=K_turb
-			//对于k的求法，不同的文献有不同的求法。
-			const double kenergy = (particlesa.vx[i] * particlesa.vx[i] + particlesa.vy[i] * particlesa.vy[i]) * 0.5;
-			particlesa.turb11[i] = 2.0 * mut * dvdx11 * rho_i - 2.0 / 3.0 * kenergy * rho_i;//����tao= ( 2*Vt*Sij-2/3Ksps*�����˺��� )*rho_i// �൱��turbulence(:,:,i)
-			particlesa.turb12[i] = 2.0 * mut * dvdx12 * rho_i;
-			particlesa.turb21[i] = 2.0 * mut * dvdx21 * rho_i;
-			particlesa.turb22[i] = 2.0 * mut * dvdx22 * rho_i - 2.0 / 3.0 * kenergy * rho_i;
-			//连续性方程，温度方程
-			if (particlesa.ftype[i] != sph::FixType::Fixed) {
-				//particlesa.drho[i] = drhodt + drhodiff;
-				particlesa.drho[i] = -particlesa.rho[i] * particlesa.divvel[i];	//没有密度耗散项			
-			}
-			else {				
-				particlesa.drho[i] = 0;
-			}			    
-			//(ii)->replx = replx;                
-			//(ii)->reply = reply;
-		}//end circle i
 		// for fluid particles（包括inlet）       -----动量方程-----
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided)
-#endif
-		for (int i = 0; i < particles.size(); i++)
-		{
-			//particle* ii = particles[i];
 
-			if (particlesa.btype[i] == sph::BoundaryType::Boundary) continue;
-			const double rho_i = particlesa.rho[i];
-			const double hsml = particlesa.hsml[i];
-			const double p_i = particlesa.press[i];
-			const double xi = particlesa.x[i];
-			const double yi = particlesa.y[i];
-			const double c0 = particlesa.c0[i];
-			const double c = particlesa.c[i];
-			const double massi = particlesa.mass[i];			
-			//------kexi_force-------			
-			double temp_sigemax = 0;//动量方程中的T 
-			double temp_sigemay = 0;//Tj-Ti			
-			//----------artificial viscosity---
-			double avx = 0;
-			double avy = 0;						
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided) reduction(+:temp_sigemax,temp_sigemay,avx,avy)
-#endif
-			for (int j = 0; j < particlesa.neibNum[i]; j++)
-			{
-				const int jj = particlesa.neiblist[i][j];
-				if (particlesa.bweight[i][j] < 0.000000001) continue;
+		singlestep_eom_dev0(particleNum(), particlesa.btype, particlesa.rho, particlesa.hsml, particlesa.press, particlesa.x, particlesa.y, particlesa.c0, particlesa.c\
+			, particlesa.mass, particlesa.neibNum, particlesa.neiblist, particlesa.bweight, particlesa.iotype, lengthofx\
+			, particlesa.wMxijx, particlesa.wMxijy, particlesa.m_11, particlesa.m_12, particlesa.m_21, particlesa.m_22\
+			, particlesa.tau11, particlesa.tau12, particlesa.tau21, particlesa.tau22, particlesa.turb11, particlesa.turb12, particlesa.turb21, particlesa.turb22\
+			, particlesa.vx, particlesa.vy, particlesa.avx, particlesa.avy, particlesa.fintx, particlesa.finty, particlesa.ftype, particlesa.ax, particlesa.ay);
 
-				const double xj = particlesa.x[jj];
-				const double yj = particlesa.y[jj];
-				double dx = xj - xi;
-				double dy = yj - yi;
-				if (particlesa.iotype[i] == InoutType::Inlet && particlesa.iotype[jj] == InoutType::Outlet)
-				{
-					dx = particlesa.x[jj] - particlesa.x[i] - lengthofx;//xi(1)
-				}
-				if (particlesa.iotype[i] == InoutType::Outlet && particlesa.iotype[jj] == InoutType::Inlet)
-				{
-					dx = particlesa.x[jj] - particlesa.x[i] + lengthofx;//xi(1)
-				}
-				const double hsmlj = particlesa.hsml[jj];
-				const double mhsml = (hsml + hsmlj) / 2;
-				const double r2 = dx * dx + dy * dy;
-				const double rho_j = particlesa.rho[jj];
-				const double massj = particlesa.mass[jj];
-				const double wMxijxV_iix = particlesa.wMxijx[i][j] * massj / rho_j;
-				const double wMxijyV_iiy = particlesa.wMxijy[i][j] * massj / rho_j;
-				//const double wMxijxV_jjx = (jj)->wMxijx[j] * massj / rho_j;//(jj)->wMxijx[j] 可能错了
-				//const double wMxijyV_jjy = (jj)->wMxijy[j] * massj / rho_j;
-				const double wMxijxV_jjx = (particlesa.m_11[jj] * dx + particlesa.m_12[jj] * dy) * particlesa.bweight[i][j] * massj / rho_j;
-				const double wMxijyV_jjy = (particlesa.m_21[jj] * dx + particlesa.m_22[jj] * dy) * particlesa.bweight[i][j] * massj / rho_j;
-				//-----internal_force-----fintx: 压强项（- 压强梯度/rho） + 物理黏性项（黏度 * 速度的拉普拉斯算子/rho）	
-				//在计算力的时候，与对速度的运算略有不同；计算力的时候采用的是PD中的态的运算思路，				
-				//double temp_ik11 = 0;
-				//double temp_ik12 = 0;
-				//double temp_ik21 = 0;
-				//double temp_ik22 = 0;
-				////对于柯西应力F：求和：bweight * (F_I* M_I + F_J* M_J)xij* V_J
-				////其中，柯西应力包括有：压强项、物理黏性项、湍流黏性项
-				//temp_ik11 = (-p_i + particlesa.tau11[i]) * particlesa.m_11[i] + particlesa.tau12[i] * particlesa.m_21[i] + (-particlesa.press[jj] + particlesa.tau11[jj]) * particlesa.m_11[jj] + particlesa.tau12[jj] * particlesa.m_21[jj];
-				//temp_ik12 = (-p_i + particlesa.tau11[i]) * particlesa.m_12[i] + particlesa.tau12[i] * particlesa.m_22[i] + (-particlesa.press[jj] + particlesa.tau11[jj]) * particlesa.m_12[jj] + particlesa.tau12[jj] * particlesa.m_22[jj];
-				//temp_ik21 = particlesa.tau21[i] * particlesa.m_11[i] + (-p_i + particlesa.tau22[i]) * particlesa.m_21[i] + particlesa.tau21[jj] * particlesa.m_11[jj] + (-particlesa.press[jj] + particlesa.tau22[jj]) * particlesa.m_21[jj];
-				//temp_ik22 = particlesa.tau21[i] * particlesa.m_12[i] + (-p_i + particlesa.tau22[i]) * particlesa.m_22[i] + particlesa.tau21[jj] * particlesa.m_12[jj] + (-particlesa.press[jj] + particlesa.tau22[jj]) * particlesa.m_22[jj];
-				//fintx += particlesa.bweight[i][j] * (temp_ik11 * dx + temp_ik12 * dy) * particlesa.mass[jj] / rho_j / rho_i;
-				//finty += particlesa.bweight[i][j] * (temp_ik21 * dx + temp_ik22 * dy) * particlesa.mass[jj] / rho_j / rho_i;
-				
-				//---------------现用柯西应力，态来表示动量方程---------------
-				//sigema_j = [ - p+txx txy tyx p+tyy ]
-				//j粒子----------------有边界粒子
-				//const double sigema_j11 = -particlesa.press[jj] + particlesa.tau11[jj];//湍流力一样在这里加
-				//const double sigema_j12 = particlesa.tau12[jj];
-				//const double sigema_j21 = particlesa.tau21[jj];
-				//const double sigema_j22 = -particlesa.press[jj] + particlesa.tau22[jj];
-				const double sigema_j11 = -particlesa.press[jj] + particlesa.tau11[jj]+particlesa.turb11[jj];//加上湍流应力
-				const double sigema_j12 = particlesa.tau12[jj]+ particlesa.turb12[jj];//particlesa.tau12[jj]=particlesa.tau21[jj];particlesa.turb12[jj]=particlesa.turb21[jj]
-				const double sigema_j21 = particlesa.tau21[jj]+ particlesa.turb21[jj];
-				const double sigema_j22 = -particlesa.press[jj] + particlesa.tau22[jj]+ particlesa.turb22[jj];
-				//i粒子
-				/*const double sigema_i11 = -p_i + particlesa.tau11[i];
-				const double sigema_i12 = particlesa.tau12[i];
-				const double sigema_i21 = particlesa.tau21[i];
-				const double sigema_i22 = -p_i + particlesa.tau22[i];*/
-				const double sigema_i11 = -p_i + particlesa.tau11[i] + particlesa.turb11[i];
-				const double sigema_i12 = particlesa.tau12[i] + particlesa.turb12[i];
-				const double sigema_i21 = particlesa.tau21[i] + particlesa.turb21[i];
-				const double sigema_i22 = -p_i + particlesa.tau22[i] + particlesa.turb22[i];
-				temp_sigemax += (sigema_j11 * wMxijxV_jjx + sigema_j12 * wMxijyV_jjy) + (sigema_i11 * wMxijxV_iix + sigema_j12 * wMxijyV_iiy);
-				temp_sigemay += (sigema_j21 * wMxijxV_jjx + sigema_j22 * wMxijyV_jjy) + (sigema_i21 * wMxijxV_iix + sigema_j22 * wMxijyV_iiy);
-				//-----turbulence-------湍流力加到柯西应力中去了
-				
-				//--------artificial viscosity-------
-				const double dvx = particlesa.vx[jj] - particlesa.vx[i];    //(Vj-Vi)
-				const double dvy = particlesa.vy[jj] - particlesa.vy[i];
-				double muv = 0;
-				double piv = 0;
-				const double cj = particlesa.c[jj];
-				const double vr = dvx * dx + dvy * dy;     //(Vj-Vi)(Rj-Ri)
-				const double mc = 0.5 * (cj + particlesa.c[i]);
-				const double mrho = 0.5 * (rho_j + particlesa.rho[i]);				
-				if (vr < 0) {
-					muv = mhsml * vr / (r2 + mhsml * mhsml * 0.01);//FAI_ij
-					//piv = (0.5 * muv - 0.5 * mc) * muv / mrho;//beta项-alpha项
-					piv = (0.5 * muv - 1.0 * mc) * muv / mrho;
-					//piv = (0.5 * muv) * muv / mrho;//只有beta项，加速度会一直很大，停不下来，穿透。
-				}
-				avx += -massj * piv * particlesa.wMxijx[i][j];
-				avy += -massj * piv * particlesa.wMxijy[i][j];
-			}
-			
-			particlesa.fintx[i] = temp_sigemax / rho_i;
-			particlesa.finty[i] = temp_sigemay / rho_i;
-			//(ii)->turbx = turbx;// / particlesa.rho[i];
-			//(ii)->turby = turby;// / particlesa.rho[i];
-			particlesa.avx[i] = avx;
-			particlesa.avy[i] = avy;
-			//(ii)->avy = 0;							
-			if (particlesa.ftype[i] != sph::FixType::Fixed)//inlet粒子的加速度场为0，只有初始速度。outlet粒子呢？
-			{				
-				particlesa.ax[i] = particlesa.fintx[i] + avx;
-				particlesa.ay[i] = particlesa.finty[i] + avy;
-				//particlesa.ay[i] = 0;
-				//particlesa.ax[i] = (ii)->fintx + avx + turbx + (ii)->replx;
-				//particlesa.ay[i] = (ii)->finty + avy + turby + (ii)->reply + gravity;				
-			}
-		}
 		const std::clock_t end = std::clock();
 		if (time_measure) std::cout << "single step costs " << double(end - begin) / TICKS_PER_SEC << "s\n";
 	}

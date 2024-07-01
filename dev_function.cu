@@ -46,6 +46,14 @@ __device__ double atomicMaxDouble(double* address, double val) {
 	return __longlong_as_double(old);
 }
 
+__device__ static inline const double func_factor(double _hsml, int _dim) {
+	return 1.0 / (3.14159265358979 * pow(_hsml, _dim)) * (1.0 - expf(-9.0)) / (1.0 - 10.0 * expf(-9.0));
+}
+//bweight(q,hsml,2)
+__device__ static inline const double func_bweight(double q, double _hsml, int _dim) {
+	return q <= 3.0 ? func_factor(_hsml, _dim) * (expf(-q * q) - expf(-9.0)) : 0;
+}
+
 __device__ static const double SoundSpeed_d(sph::FluidType _f) {
 	switch (_f)
 	{
@@ -947,9 +955,7 @@ __global__ void singlestep_eom_dev1(unsigned int particleNum, sph::BoundaryType*
 		//----------artificial viscosity---
 		double avx = 0;
 		double avy = 0;
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided) reduction(+:temp_sigemax,temp_sigemay,avx,avy)
-#endif
+
 		for (int j = 0; j < neibNum[i]; j++)
 		{
 			const int jj = neiblist[i][j];
@@ -1055,6 +1061,207 @@ __global__ void singlestep_eom_dev1(unsigned int particleNum, sph::BoundaryType*
 
 }
 
+__global__ void run_half3Nshiftc_dev1(unsigned int particleNum, sph::FixType* ftype, double* rho, double* half_rho, double* drho, double dt, double* vx, double* half_vx, double*ax\
+									, double* vy, double* half_vy, double* ay, double* vol, double* mass, double* x, double* half_x, double* half_y, double* y, double* ux, double* uy\
+									, double* temperature, double* half_temperature, double* temperature_t, sph::ShiftingType stype, unsigned int* neibNum, unsigned int** neiblist\
+									, double** bweight, double* Shift_c) {
+	for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < particleNum; i += gridDim.x * blockDim.x)
+	{
+		/* code */
+		//particle* ii = particles[i];
+		//(*i)->integrationfull(dt);
+		//if (particlesa.btype[i] == sph::BoundaryType::Boundary) { particlesa.shift_c[i] = 0; continue; }
+
+		if (ftype[i] != sph::FixType::Fixed) {
+			rho[i] = half_rho[i] + drho[i] * dt;//i时刻的密度+(i+0.5*dt)时刻的密度变化率×dt			 
+			vx[i] = half_vx[i] + ax[i] * dt;//i时刻的速度+(i+0.5*dt)时刻的加速度×dt
+			vy[i] = half_vy[i] + ay[i] * dt;
+			vol[i] = mass[i] / rho[i];
+			x[i] = half_x[i] + vx[i] * dt;//i时刻的位置+(i+*dt)时刻的速度×dt---------------------
+			//y[i] = half_y[i] + vy[i] * dt;
+			double Y = half_y[i] + vy[i] * dt;//加个判断，防止冲进边界
+			/*if (y > indiameter * 0.5 - dp || y < -indiameter * 0.5 + dp) {
+				y = half_y[i];
+			}*/
+			y[i] = Y;
+			ux[i] += vx[i] * dt;
+			uy[i] += vy[i] * dt;
+			temperature[i] = half_temperature[i] + temperature_t[i] * dt;
+		}
+		if (stype != sph::ShiftingType::DivC) continue;
+
+		double shift_c = 0;
+
+		for (int j = 0; j < neibNum[i]; j++)
+		{
+			const int jj = neiblist[i][j];
+			const double rho_j = rho[jj];
+			const double massj = mass[jj];
+			shift_c += bweight[i][j] * massj / rho_j;
+		}
+		Shift_c[i] = shift_c;
+	}
+
+}
+
+__global__ void run_shifttype_divc_dev1(unsigned int particleNum, sph::BoundaryType* btype, double* Hsml, double* shift_c, unsigned int* neibNum, unsigned int** neiblist, double* mass\
+										, double* rho, double** dbweightx, double** dbweighty, double* Vx, double* Vy, double shiftingCoe, double dt, double dp, double* Shift_x, double* Shift_y\
+										, double* x, double* y, double* ux, double* uy, double* drmax, double* drmax2, int* lock) {
+	for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < particleNum; i += gridDim.x * blockDim.x)
+	{
+		/* code */
+		//particle* ii = particles[i];
+		//(*i)->shifting(dt);
+		if (btype[i] == sph::BoundaryType::Boundary) continue;
+		//if (ftype[i] != sph::FixType::Free) continue;
+		const double hsml = Hsml[i];
+		const double conc = shift_c[i];
+
+		double shift_x = 0;
+		double shift_y = 0;
+
+
+
+		for (int j = 0; j < neibNum[i]; j++)
+		{
+			const int jj = neiblist[i][j];
+			const double mhsml = (hsml + Hsml[jj]) * 0.5;
+			const double conc_ij = shift_c[jj] - conc;
+
+			shift_x += conc_ij * mass[jj] / rho[jj] * dbweightx[i][j];
+			shift_y += conc_ij * mass[jj] / rho[jj] * dbweighty[i][j];
+		}
+		const double vx = Vx[i];
+		const double vy = Vy[i];
+		const double vel = sqrt(vx * vx + vy * vy);
+		shift_x *= -2.0 * dp * vel * dt * shiftingCoe;
+		shift_y *= -2.0 * dp * vel * dt * shiftingCoe;
+
+		Shift_x[i] = shift_x;
+		Shift_y[i] = shift_y;
+
+		x[i] += shift_x;
+		y[i] += shift_y;
+		ux[i] += shift_x;
+		uy[i] += shift_y;
+
+		const double Ux = ux[i];
+		const double Uy = uy[i];
+		const double disp = sqrt(Ux * Ux + Uy * Uy);
+
+		while (atomicCAS(lock, 0, 1) != 0); // 尝试获取锁
+
+		if (disp > *drmax) {
+
+			*drmax2 = *drmax;
+			*drmax = disp;
+		}
+		else if (disp > *drmax2) {
+			*drmax2 = disp;
+		}
+
+		atomicExch(lock, 0);
+	}
+
+}
+
+__global__ void run_shifttype_velc_dev1(unsigned int particleNum, sph::BoundaryType* btype, double* Hsml, double* rho, double* C0, unsigned int* neibNum, unsigned int** neiblist\
+										, double** bweight, const double bweightdx, double* mass, double** dbweightx, double** dbweighty, double* Vx, double* Vy, double dp, double shiftingCoe\
+										, double* Shift_x, double* Shift_y, double* x, double* y, double* ux, double* uy, double* drmax, double* drmax2, int* lock) {
+	for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < particleNum; i += gridDim.x * blockDim.x)
+	{
+		/* code */
+		//particle* ii = particles[i];
+		//(*i)->shifting(dt);
+		if (btype[i] == sph::BoundaryType::Boundary) continue;
+		//if (ftype[i] != sph::FixType::Free) continue;
+		const double hsml = Hsml[i];
+		const double rho_i = rho[i];
+		const double c0 = C0[i];
+
+		double shift_x = 0;
+		double shift_y = 0;
+
+		for (int j = 0; j < neibNum[i]; j++)
+		{
+			const int jj = neiblist[i][j];
+			const double frac = bweight[i][j] / bweightdx;
+			const double head = 1.0 + 0.2 * pow(frac, 4);
+			const double rho_j = rho[jj];
+			const double rho_ij = rho_i + rho_j;
+			const double mass_j = mass[jj];
+
+			shift_x += head * dbweightx[i][j] * mass_j / rho_ij;
+			shift_y += head * dbweighty[i][j] * mass_j / rho_ij;
+		}
+		const double vx = Vx[i];
+		const double vy = Vy[i];
+		const double vel = sqrt(vx * vx + vy * vy);
+		shift_x *= -8.0 * dp * dp * vel / c0 * shiftingCoe;
+		shift_y *= -8.0 * dp * dp * vel / c0 * shiftingCoe;
+
+		Shift_x[i] = shift_x;
+		Shift_y[i] = shift_y;
+
+		x[i] += shift_x;
+		y[i] += shift_y;
+		ux[i] += shift_x;
+		uy[i] += shift_y;
+
+		const double Ux = ux[i];
+		const double Uy = uy[i];
+		const double disp = sqrt(Ux * Ux + Uy * Uy);
+
+		while (atomicCAS(lock, 0, 1) != 0);
+		{
+			if (disp > *drmax) {
+				*drmax2 = *drmax;
+				*drmax = disp;
+			}
+			else if (disp > *drmax2) {
+				*drmax2 = disp;
+			}
+		}
+		atomicExch(lock, 0);
+	}
+
+}
+
+__global__ void density_filter_dev1(unsigned int particleNum, sph::BoundaryType* btype, double* Hsml, unsigned int* neibNum, unsigned int** neiblist , double* press\
+									, double* back_p, double* c0, double* rho0, double* mass, double*rho, double** bweight) {
+	for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < particleNum; i += gridDim.x * blockDim.x)
+	{
+		//(*i)->density_filter();
+		//particle* ii = particles[i];
+		if (btype[i] == sph::BoundaryType::Boundary) continue;
+		double beta0_mls = 0;
+		double rhop_sum_mls = 0;
+		const double hsml = Hsml[i];
+
+
+		for (int j = 0; j < neibNum[i]; j++)
+		{
+			const int jj = neiblist[i][j];
+			const double rho_j = (press[jj] - back_p[jj]) / c0[jj] / c0[jj] + rho0[jj];
+			const double v_j = mass[jj] / rho[jj];
+			const double mass_j = rho_j * v_j;
+			beta0_mls += bweight[i][j] * v_j;
+			rhop_sum_mls += bweight[i][j] * mass_j;
+		}
+
+		beta0_mls += func_factor(hsml, 2) * mass[i] / rho[i];
+		rhop_sum_mls += func_factor(hsml, 2) * mass[i];
+		rho[i] = rhop_sum_mls / beta0_mls;
+	}
+}
+
+
+
+
+
+
+
+
 void getdt_dev0(unsigned int particleNum, double* dtmin, double* divvel, double* hsml, sph::FluidType* fltype, double vmax, double* Ax, double* Ay) {
 
 	getdt_dev<<<32,32>>>(particleNum, dtmin, divvel, hsml, fltype, vmax, Ax, Ay);
@@ -1123,6 +1330,13 @@ void singlestep_updateWeight_dev0(unsigned int particleNum, unsigned int* neibNu
 	CHECK(cudaDeviceSynchronize());
 }
 
+void singlestep_boundryPNV_dev0(unsigned int particleNum, sph::BoundaryType* btype, unsigned int* neibNum, unsigned int** neiblist, sph::FixType* ftype, double* mass\
+	, double* rho, double* press, double** bweight, double* vx, double* vy, double* Vcc) {
+
+	singlestep_boundryPNV_dev1<<<32,32>>>(particleNum, btype, neibNum, neiblist, ftype, mass, rho, press, bweight, vx, vy, Vcc);
+	CHECK(cudaDeviceSynchronize());
+}
+
 void singlestep_shapeMatrix_dev0(unsigned int particleNum, double* rho, double* x, double* y, unsigned int* neibNum, unsigned int** neiblist, double** bweight\
 	, sph::InoutType* iotype, double lengthofx, double* mass, double* M_11, double* M_12, double* M_21, double* M_22) {
 
@@ -1162,3 +1376,39 @@ void singlestep_eom_dev0(unsigned int particleNum, sph::BoundaryType* btype, dou
 	CHECK(cudaDeviceSynchronize());
 }
 
+void run_half3Nshiftc_dev0(unsigned int particleNum, sph::FixType* ftype, double* rho, double* half_rho, double* drho, double dt, double* vx, double* half_vx, double* ax\
+	, double* vy, double* half_vy, double* ay, double* vol, double* mass, double* x, double* half_x, double* half_y, double* y, double* ux, double* uy\
+	, double* temperature, double* half_temperature, double* temperature_t, sph::ShiftingType stype, unsigned int* neibNum, unsigned int** neiblist\
+	, double** bweight, double* Shift_c) {
+
+	run_half3Nshiftc_dev1 << <32, 32 >> > (particleNum, ftype, rho, half_rho, drho, dt, vx, half_vx, ax\
+		, vy, half_vy, ay, vol, mass, x, half_x, half_y, y, ux, uy\
+		, temperature, half_temperature, temperature_t, stype, neibNum, neiblist, bweight, Shift_c);
+
+	CHECK(cudaDeviceSynchronize());
+}
+
+void run_shifttype_divc_dev0(unsigned int particleNum, sph::BoundaryType* btype, double* Hsml, double* shift_c, unsigned int* neibNum, unsigned int** neiblist, double* mass\
+	, double* rho, double** dbweightx, double** dbweighty, double* Vx, double* Vy, double shiftingCoe, double dt, double dp, double* Shift_x, double* Shift_y\
+	, double* x, double* y, double* ux, double* uy, double* drmax, double* drmax2, int* lock) {
+
+	run_shifttype_divc_dev1<<<32,32>>>(particleNum,btype, Hsml, shift_c, neibNum, neiblist, mass, rho, dbweightx, dbweighty, Vx, Vy\
+										, shiftingCoe, dt, dp, Shift_x, Shift_y, x, y, ux, uy, drmax, drmax2, lock);
+	CHECK(cudaDeviceSynchronize());
+}
+
+void run_shifttype_velc_dev0(unsigned int particleNum, sph::BoundaryType* btype, double* Hsml, double* rho, double* C0, unsigned int* neibNum, unsigned int** neiblist\
+	, double** bweight, const double bweightdx, double* mass, double** dbweightx, double** dbweighty, double* Vx, double* Vy, double dp, double shiftingCoe\
+	, double* Shift_x, double* Shift_y, double* x, double* y, double* ux, double* uy, double* drmax, double* drmax2, int* lock) {
+
+	run_shifttype_velc_dev1<<<32,32>>>(particleNum, btype, Hsml, rho, C0, neibNum, neiblist\
+		, bweight, bweightdx, mass, dbweightx, dbweighty, Vx, Vy, dp, shiftingCoe\
+		, Shift_x, Shift_y, x, y, ux, uy, drmax, drmax2, lock);
+	CHECK(cudaDeviceSynchronize());
+}
+
+void density_filter_dev0(unsigned int particleNum, sph::BoundaryType* btype, double* Hsml, unsigned int* neibNum, unsigned int** neiblist, double* press\
+	, double* back_p, double* c0, double* rho0, double* mass, double* rho, double** bweight) {
+	density_filter_dev1<<<32,32>>>(particleNum, btype, Hsml, neibNum, neiblist, press, back_p, c0, rho0, mass, rho, bweight);
+	CHECK(cudaDeviceSynchronize());
+}
