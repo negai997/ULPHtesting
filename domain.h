@@ -998,7 +998,7 @@ namespace sph {
 			this->adjustC0();
 			this->inlet();//给入口定压力，速度继承
 			this->outlet();//这里判断outlet粒子,等out粒子变到intlet粒子，就重新建近邻，温度也得初始化
-			particlesa.shift2dev(particleNum());
+			//particlesa.shift2dev(particleNum());
 			this->buildNeighb(true);
 			//this->buildNeighb0(true);
 			this->run(dt);
@@ -1023,7 +1023,7 @@ namespace sph {
 				else
 					this->screen(istep);
 			}
-			if (istep == t_old + 1 || (outIntval != 0 && (istep - t_old) % outIntval == 0)||istep == t_old + 10)
+			if (istep == t_old + 1 || (outIntval != 0 && (istep - t_old) % outIntval == 0))
 			{
 				this->output(istep);
 				//this->output_one(istep);
@@ -1067,6 +1067,7 @@ namespace sph {
 		}
 		
 		return *dtmin;
+		cudaFree(dtmin);
 		//return 0.0000001;
 	}
 
@@ -1152,6 +1153,11 @@ namespace sph {
 			, ngridx, ngridy, dxrange, dyrange, *x_min, *y_min\
 			, xgcell, ygcell, celldata, grid_d, particlesa.hsml, particlesa.idx, particlesa.iotype, lengthofx);
 
+		cudaFree(x_max);
+		cudaFree(x_min);
+		cudaFree(y_max);
+		cudaFree(y_min);
+		cudaFree(grid_d);
 		cudaFree(xgcell);
 		cudaFree(ygcell);
 		cudaFree(celldata);
@@ -1578,7 +1584,7 @@ namespace sph {
 	{
 		//std::string filename;
 		char buff[100];		
-		snprintf(buff, sizeof(buff), "E:\\code1\\ULPHbase\\data\\coutte\\data2\\output%10.10d.dat", istep);//在指定路径下写文件
+		snprintf(buff, sizeof(buff), "D:\\ULPH_CUDA_data\\output%10.10d.dat", istep);//在指定路径下写文件
 		//snprintf(buff, sizeof(buff), "output%10.10d.dat", istep);
 		//filename = "output" + std::to_string(istep) + ".dat";
 		std::string filename = buff;//得到文件名ULPH_temperature_haosan
@@ -1801,7 +1807,7 @@ namespace sph {
 			, particlesa.btype, particlesa.ftype, particlesa.temperature_t, dt2, d_vmax);
 
 		vmax = *d_vmax;
-
+		cudaFree(d_vmax);
 
 		//-----------corrector--------------
 		this->single_step();
@@ -1846,6 +1852,11 @@ namespace sph {
 				, particlesa.shift_x, particlesa.shift_y, particlesa.x, particlesa.y, particlesa.ux, particlesa.uy, drmax_d, drmax2_d, lock);
 
 		}
+		drmax = *drmax_d;
+		drmax2 = *drmax2_d;
+		cudaFree(drmax_d);
+		cudaFree(drmax2_d);
+		cudaFree(lock);
 	}
 	//求解温度、运动
 	inline void domain::single_step_temperature_gaojie() {

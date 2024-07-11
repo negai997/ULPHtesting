@@ -39,7 +39,7 @@ __global__ void buildNeighb_dev1(unsigned int particleNum, double* ux, double* u
 
 __global__ void buildNeighb_dev2(unsigned int particleNum, double* X, double* Y, unsigned int** neiblist, unsigned int* neibNum\
 	, const int ngridx, const int ngridy, const double dxrange, const double dyrange, double x_min, double y_min\
-	, int* xgcell, int* ygcell, int* celldata, int* grid_d);
+	, int* xgcell, int* ygcell, int* celldata, int* grid_d, int* lock);
 
 __global__ void buildNeighb_dev3(unsigned int particleNum, double* X, double* Y, unsigned int** neiblist, unsigned int* neibNum, const double* Hsml\
 	, const int ngridx, const int ngridy, const double dxrange, const double dyrange, unsigned int* idx, sph::InoutType* iotype\
