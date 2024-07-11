@@ -30,7 +30,7 @@ int main()
 		}*/
 	const double spacing = 0.005;// 0.005
 	const double width = 0.2;//长0.05
-	const double height = 0.09;//高,需要边界各加一层边界粒子来考虑
+	const double height = 0.9;//高,需要边界各加一层边界粒子来考虑
 	const double inletWidth = 4 * spacing;//(周期边界的)流入区
 	const double inletDiameter = height;//高
 	std::cout << "----------模型尺寸----------- " << std::endl;

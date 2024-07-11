@@ -266,7 +266,6 @@ __global__ void buildNeighb_dev2(unsigned int particleNum, double* X, double* Y,
 
 	for (int i = blockDim.x * blockIdx.x + threadIdx.x + 1; i < particleNum+1; i += gridDim.x * blockDim.x)
 	{
-		int k = 0;
 		double x, y;
 		x = X[i - 1];
 		//printf("%lf", x);
@@ -298,11 +297,12 @@ __global__ void buildNeighb_dev2(unsigned int particleNum, double* X, double* Y,
 		}
 		//try {
 		//printf("CAS is %d\n", atomicCAS(lock, 0, 1));
-		while (k=atomicCAS(lock, 0, 1))
-		//k = atomicCAS(lock, 0, 1);
-			//printf("CAS is %d\n",k);
-		//printf("CAS is %d\n", k);
-			celldata[i - 1] = static_cast<int>(grid_d[(xxcell-1) * ngridy + yycell-1]);//记录粒子所在的网格编号；
+		for (int s = 0; s < 32; s++) {
+			if ((blockDim.x * blockIdx.x + threadIdx.x) % 32 != s)
+				continue;
+			while (atomicCAS(lock, 0, 1) != 0);
+
+			celldata[i - 1] = static_cast<int>(grid_d[(xxcell - 1) * ngridy + yycell - 1]);//记录粒子所在的网格编号；
 			//但是后面有一句grid(xxcell, yycell) = i;这样就不再是记录网格编号，而是记录i，即粒子id
 			//std::cerr << std::endl << "static_cast<int>(grid(xxcell, yycell)): " << celldata[i - 1] << std::endl;
 		//}
@@ -311,9 +311,11 @@ __global__ void buildNeighb_dev2(unsigned int particleNum, double* X, double* Y,
 		//	std::cout << xxcell << '\t' << yycell;
 		//}
 		//std::cerr << std::endl << "grid(xxcell, yycell): " << grid(xxcell, yycell) << std::endl;
-		grid_d[(xxcell - 1) * ngridy + yycell - 1] = i;// i starts from 0 //没理解这句什么意思？
-		//std::cerr << std::endl << "grid(xxcell, yycell): " << grid(xxcell, yycell) << std::endl;
-		atomicCAS(lock, 1, 0);
+			grid_d[(xxcell - 1) * ngridy + yycell - 1] = i;// i starts from 0 //没理解这句什么意思？
+			//std::cerr << std::endl << "grid(xxcell, yycell): " << grid(xxcell, yycell) << std::endl;
+			atomicExch(lock, 0);
+		}
+
 	}
 }
 
@@ -1159,20 +1161,24 @@ __global__ void run_shifttype_divc_dev1(unsigned int particleNum, sph::BoundaryT
 		const double Uy = uy[i];
 		const double disp = sqrt(Ux * Ux + Uy * Uy);
 
-		while (atomicCAS(lock, 0, 1) == 0); // 尝试获取锁
+		for (int s = 0; s < 32; s++) {
+			if ((blockDim.x * blockIdx.x + threadIdx.x) % 32 != s)
+				continue;
+			while (atomicCAS(lock, 0, 1) == 0); // 尝试获取锁
 
-		if (disp > *drmax) {
+			if (disp > *drmax) {
 
-			*drmax2 = *drmax;
-			*drmax = disp;
+				*drmax2 = *drmax;
+				*drmax = disp;
+			}
+			else if (disp > *drmax2) {
+				*drmax2 = disp;
+			}
+
+			atomicExch(lock, 0);
+
 		}
-		else if (disp > *drmax2) {
-			*drmax2 = disp;
-		}
-
-		atomicExch(lock, 0);
 	}
-
 }
 
 __global__ void run_shifttype_velc_dev1(unsigned int particleNum, sph::BoundaryType* btype, double* Hsml, double* rho, double* C0, unsigned int* neibNum, unsigned int** neiblist\
@@ -1222,19 +1228,23 @@ __global__ void run_shifttype_velc_dev1(unsigned int particleNum, sph::BoundaryT
 		const double Uy = uy[i];
 		const double disp = sqrt(Ux * Ux + Uy * Uy);
 
-		while (atomicCAS(lock, 0, 1) == 0);
-		{
-			if (disp > *drmax) {
-				*drmax2 = *drmax;
-				*drmax = disp;
+		for (int s = 0; s < 32; s++) {
+			if ((blockDim.x * blockIdx.x + threadIdx.x) % 32 != s)
+				continue;
+			while (atomicCAS(lock, 0, 1) == 0);
+			{
+				if (disp > *drmax) {
+					*drmax2 = *drmax;
+					*drmax = disp;
+				}
+				else if (disp > *drmax2) {
+					*drmax2 = disp;
+				}
 			}
-			else if (disp > *drmax2) {
-				*drmax2 = disp;
-			}
-		}
-		atomicExch(lock, 0);
-	}
+			atomicExch(lock, 0);
 
+		}
+	}
 }
 
 __global__ void density_filter_dev1(unsigned int particleNum, sph::BoundaryType* btype, double* Hsml, unsigned int* neibNum, unsigned int** neiblist , double* press\
@@ -1305,11 +1315,12 @@ void buildNeighb_dev02(unsigned int particleNum, double* X, double* Y, unsigned 
 	int* lock;
 	cudaMallocManaged(&lock,sizeof(int));
 	*lock = 0;
-	buildNeighb_dev2 << <16, 1 >> > ( particleNum, X, Y, neiblist, neibNum, ngridx, ngridy, dxrange, dyrange, x_min, y_min, xgcell, ygcell, celldata, grid_d, lock);
+	buildNeighb_dev2 << <1, 512 >> > ( particleNum, X, Y, neiblist, neibNum, ngridx, ngridy, dxrange, dyrange, x_min, y_min, xgcell, ygcell, celldata, grid_d, lock);
 	CHECK(cudaDeviceSynchronize());
 	buildNeighb_dev3 << <32, 512 >> > (particleNum, X, Y, neiblist, neibNum, Hsml, ngridx, ngridy, dxrange, dyrange, idx, iotype, xgcell, ygcell, celldata, grid_d, lengthofx);
 	CHECK(cudaDeviceSynchronize());
-	printf("particle_1's neighberNum is %d\n", neibNum[0]);
+	//printf("particle_1's neighberNum is %d\n", neibNum[0]);
+	cudaFree(lock);
 
 }
 

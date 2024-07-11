@@ -1047,7 +1047,7 @@ namespace sph {
 	{
 		//静态热传导，由于速度为0，求dt时涉及速度加速度的统统不要
 
-		const double alpha_pi = 1.0;
+		double alpha_pi = 1.0;
 		double* dtmin;
 		cudaMallocManaged(&dtmin, sizeof(double));
 		*dtmin = DBL_MAX;
@@ -1065,9 +1065,10 @@ namespace sph {
 			//std::cerr << "dt33:  " << dt33 << std::endl;
 			exit(-1);
 		}
-		
-		return *dtmin;
+		alpha_pi = *dtmin;
 		cudaFree(dtmin);
+		return alpha_pi;
+
 		//return 0.0000001;
 	}
 
@@ -1828,6 +1829,10 @@ namespace sph {
 			//(*i)->shifting_c();
 		//}
 
+
+
+		if (stype == ShiftingType::None) return;
+
 		double* drmax_d;
 		double* drmax2_d;
 		int* lock;
@@ -1835,11 +1840,9 @@ namespace sph {
 		cudaMallocManaged(&drmax2_d, sizeof(double));
 		cudaMallocManaged(&lock, sizeof(int));
 
-		if (stype == ShiftingType::None) return;
-
 		if (stype == ShiftingType::DivC) {
 
-			run_shifttype_divc_dev0(particleNum(), particlesa.btype, particlesa.hsml, particlesa.shift_c, particlesa.neibNum, particlesa.neiblist, particlesa.mass\
+			//run_shifttype_divc_dev0(particleNum(), particlesa.btype, particlesa.hsml, particlesa.shift_c, particlesa.neibNum, particlesa.neiblist, particlesa.mass\
 				, particlesa.rho, particlesa.dbweightx, particlesa.dbweighty, particlesa.vx, particlesa.vy, shiftingCoe, dt, dp, particlesa.shift_x, particlesa.shift_y\
 				, particlesa.x, particlesa.y, particlesa.ux, particlesa.uy, drmax_d, drmax2_d, lock);
 
