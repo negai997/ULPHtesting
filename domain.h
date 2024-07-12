@@ -1792,10 +1792,10 @@ namespace sph {
 										, particlesa.x, particlesa.y, particlesa.vx, particlesa.vy, particlesa.rho, particlesa.temperature);
 
 		//-------------predictor------------
-		this->single_step();
+		//this->single_step();
 		//this->single_step0();
 		//this->single_step_temperature();
-		//this->single_step_temperature_gaojie();
+		this->single_step_temperature_gaojie();
 		vmax = 0;
 
 		double* d_vmax;
@@ -1864,242 +1864,26 @@ namespace sph {
 	//求解温度、运动
 	inline void domain::single_step_temperature_gaojie() {
 		const std::clock_t begin = std::clock();
+		
 		//pressure 状态方程
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided)	
-#endif
-		for (int i = 0; i < particles.size(); i++)
-		{
-			particle* ii = particles[i];
-			if (particlesa.btype[i] == sph::BoundaryType::Boundary) continue;
-			const double c0 = particlesa.c0[i];
-			const double rho0 = particlesa.rho0[i];
-			const double rhoi = particlesa.rho[i];			
-			const double gamma = (ii)->gamma;		
-			const double b = c0 * c0 * rho0 / gamma;     //b--B,
-			const double p_back = (ii)->back_p;
-//			if (particlesa.iotype[i] == InoutType::Inlet) {
-//				// interpolation
-//				double p = 0;
-//				double pmax = DBL_MIN;
-//				double vcc = 0;
-//#ifdef OMP_USE
-//#pragma omp parallel for schedule (guided) reduction(+:p,vcc)
-//#endif
-//				for (int j = 0; j < ii->neiblist.size(); j++)
-//				{
-//					const int jj = particlesa.neiblist[i][j];
-//					if (particlesa.iotype[i] == particlesa.iotype[jj]) continue;
-//					const double mass_j = particlesa.mass[jj];
-//					const double rho_j = particlesa.rho[jj];
-//					const double p_k = particlesa.press[jj];
-//					p += p_k * particlesa.bweight[i][j];
-//					vcc += particlesa.bweight[i][j];					
-//				}
-//				p = vcc > 0.00000001 ? p / vcc : 0;				
-//				particlesa.vcc[i] = vcc;
-//				particlesa.press[i] = p; // inlet部分的压力是做的插值求得，按道理应该略大于右边粒子的压力，才会产生推的作用。
-//				//particlesa.press[i] = 0;			
-//			}
-//			else
-			//inlet和outlet的压力应该单独设置
-				particlesa.press[i] = b * (pow(rhoi / rho0, gamma) - 1.0) + p_back;      // 流体区
-				
-			if (particlesa.press[i] < p_back) 
-				particlesa.press[i] = p_back;
-		}
+		single_temp_eos_dev0(particleNum(), particlesa.btype, particlesa.c0, particlesa.rho0, particlesa.rho, particlesa.gamma, particlesa.back_p, particlesa.press);
+
 		this->updateWeight();
 		// boundary pressure  and 无滑移速度边界条件	上下固壁为自由滑移，圆柱边界为无滑移边界
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided)
-#endif
-		for (int i = 0; i < particles.size(); i++)
-		{
-			//particle* ii = particles[i];
-			if (particlesa.btype[i] != sph::BoundaryType::Boundary) continue;
-			//if (particlesa.iotype[i] == sph::InoutType::Buffer) continue;			
-			double p = 0, vcc = 0;
-			double v_x = 0, v_y = 0;			
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided) reduction(+:p,vcc,v_x,v_y)
-#endif
-			for (int j = 0; j < particlesa.neibNum[i]; j++)
-			{
-				const int jj = particlesa.neiblist[i][j];
-				//if (particlesa.btype[i] == particlesa.btype[jj]) continue;//Buffer粒子也在这里，导致流出边界固壁的压力不正常
-				if (particlesa.ftype[jj] == sph::FixType::Fixed) continue;//其他固壁粒子不参与，ghost不参与，buffer参与
-				const double mass_j = particlesa.mass[jj];
-				const double rho_j = particlesa.rho[jj];
-				const double p_k = particlesa.press[jj];
-				p += p_k * particlesa.bweight[i][j];//
-				vcc += particlesa.bweight[i][j];
-				v_x += particlesa.vx[jj] * particlesa.bweight[i][j];//需要将速度沿法线分解，还没分
-				v_y += particlesa.vy[jj] * particlesa.bweight[i][j];				
-			}
-			p = vcc > 0.00000001 ? p / vcc : 0;//p有值
-			v_x = vcc > 0.00000001 ? v_x / vcc : 0;//v_x一直为0！待解决
-			v_y = vcc > 0.00000001 ? v_y / vcc : 0;				
-			double vx0 = 0;
-			double vy0 = 0;
-			particlesa.vcc[i] = vcc;
-			particlesa.press[i] = p;
-			particlesa.vx[i] = 2.0*vx0 - v_x;//无滑移，要改成径向，切向
-			particlesa.vy[i] = 2.0*vy0 - v_y;							
-		}
+		single_temp_boundary_dev0(particleNum(), particlesa.btype, particlesa.neibNum, particlesa.neiblist, particlesa.ftype, particlesa.mass, particlesa.rho\
+			, particlesa.press, particlesa.bweight, particlesa.vx, particlesa.vy, particlesa.vcc);
+
+
 		//this->updateGhostInfo();
 		//this->Ghost2bufferInfo();
 		
 		//shap matrix   高阶M+一阶m矩阵
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided)
-#endif
-		for (int i = 0; i < particles.size(); i++)
-		{
-			//particle* ii = particles[i];
+		single_temp_shapematrix_dev0(particleNum(), particlesa.btype, particlesa.rho, particlesa.hsml, particlesa.x, particlesa.y, particlesa.neibNum, particlesa.neiblist\
+			, particlesa.bweight, particlesa.iotype, lengthofx, particlesa.mass, particlesa.m_11, particlesa.m_12, particlesa.m_21, particlesa.m_22, particlesa.M_11\
+			, particlesa.M_12, particlesa.M_13, particlesa.M_14, particlesa.M_15, particlesa.M_21, particlesa.M_22, particlesa.M_23, particlesa.M_24, particlesa.M_25\
+			, particlesa.M_31, particlesa.M_32, particlesa.M_33, particlesa.M_34, particlesa.M_35, particlesa.M_51, particlesa.M_52, particlesa.M_53, particlesa.M_54, particlesa.M_55);
 
-			if (particlesa.btype[i] == sph::BoundaryType::Boundary) continue;//边界粒子没有计算M矩阵
-			const double rho_i = particlesa.rho[i];
-			const double hsml = particlesa.hsml[i];
-			const double xi = particlesa.x[i];
-			const double yi = particlesa.y[i];
-			double k_11 = 0;//K
-			double k_12 = 0;
-			double k_21 = 0;
-			double k_22 = 0;
-			double m_11 = 0;
-			double m_12 = 0;
-			double m_21 = 0;
-			double m_22 = 0;
-			double matrix[MAX_SIZE][MAX_SIZE];//M矩阵
-			double inverse[MAX_SIZE][MAX_SIZE];//逆矩阵			
-			int size = 5;
-			matrix[0][0] = matrix[0][1] = matrix[0][2] = matrix[0][3] = matrix[0][4] = 0;
-			matrix[1][0] = matrix[1][1] = matrix[1][2] = matrix[1][3] = matrix[1][4] = 0;
-			matrix[2][0] = matrix[2][1] = matrix[2][2] = matrix[2][3] = matrix[2][4] = 0;
-			matrix[3][0] = matrix[3][1] = matrix[3][2] = matrix[3][3] = matrix[3][4] = 0;
-			matrix[4][0] = matrix[4][1] = matrix[4][2] = matrix[4][3] = matrix[4][4] = 0;
-			//将每个元素的值代入矩阵，创建M矩阵
-			double a00 = 0; double a01 = 0; double a02 = 0; double a03 = 0; double a04 = 0;
-			double a11 = 0; double a14 = 0;
-			double a22 = 0; double a23 = 0; double a24 = 0;
-			double a34 = 0; double a44 = 0;
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided) reduction(+:a00,a01,a02,a03,a04,a11,a14,a22,a23,a24,a34,a44)
-#endif
-			for (int j = 0; j < particlesa.neibNum[i]; j++)
-			{
-				const int jj = particlesa.neiblist[i][j];
-				if (particlesa.bweight[i][j] < 0.000000001) continue;
-				const double xj = particlesa.x[jj];
-				const double yj = particlesa.y[jj];
-				double dx = xj - xi;
-				double dy = yj - yi;
-				if (particlesa.iotype[i] == InoutType::Inlet && particlesa.iotype[jj] == InoutType::Outlet)
-				{
-					dx = particlesa.x[jj] - particlesa.x[i] - lengthofx ;//xi(1)
-				}
-				if (particlesa.iotype[i] == InoutType::Outlet && particlesa.iotype[jj] == InoutType::Inlet)
-				{
-					dx = particlesa.x[jj] - particlesa.x[i] + lengthofx ;//xi(1)
-				}
-				const double rho_j = particlesa.rho[jj];
-				const double massj = particlesa.mass[jj];
-				//一阶
-				//k_11 += dx * dx * massj / rho_j * particlesa.bweight[i][j];	//k11
-				//k_12 += dx * dy * massj / rho_j * particlesa.bweight[i][j];//k_12=k_21
-				//k_21 += dy * dx * massj / rho_j * particlesa.bweight[i][j];
-				//k_22 += dy * dy * massj / rho_j * particlesa.bweight[i][j];
-				//二阶 matrix[0][0]=k_11
-				/*matrix[0][0] += dx * dx * massj / rho_j * particlesa.bweight[i][j];
-				matrix[0][1] += dx * dy * massj / rho_j * particlesa.bweight[i][j];
-				matrix[0][2] += dx * dx * dx * massj / rho_j * particlesa.bweight[i][j];
-				matrix[0][3] += dx * dx * dy * massj / rho_j * particlesa.bweight[i][j];
-				matrix[0][4] += dx * dy * dy * massj / rho_j * particlesa.bweight[i][j];*/
-				a00 += dx * dx * massj / rho_j * particlesa.bweight[i][j];// = k11
-				a01 += dx * dy * massj / rho_j * particlesa.bweight[i][j];// = k12 = k_21
-				a02 += dx * dx * dx * massj / rho_j * particlesa.bweight[i][j];
-				a03 += dx * dx * dy * massj / rho_j * particlesa.bweight[i][j];
-				a04 += dx * dy * dy * massj / rho_j * particlesa.bweight[i][j];
-				/*matrix[1][0] = matrix[0][1];
-				matrix[1][1] += dy * dy * massj / rho_j * particlesa.bweight[i][j];
-				matrix[1][2] = matrix[0][3];
-				matrix[1][3] = matrix[0][4];
-				matrix[1][4] += dy * dy * dy * massj / rho_j * particlesa.bweight[i][j];*/
-				a11 += dy * dy * massj / rho_j * particlesa.bweight[i][j];// = k22
-				a14 += dy * dy * dy * massj / rho_j * particlesa.bweight[i][j];
-				/*matrix[2][0] = matrix[0][2];
-				matrix[2][1] = matrix[1][2];
-				matrix[2][2] += dx * dx * dx * dx * massj / rho_j * particlesa.bweight[i][j];
-				matrix[2][3] += dx * dx * dx * dy * massj / rho_j * particlesa.bweight[i][j];
-				matrix[2][4] += dx * dx * dy * dy * massj / rho_j * particlesa.bweight[i][j];*/
-				a22 += dx * dx * dx * dx * massj / rho_j * particlesa.bweight[i][j];
-				a23 += dx * dx * dx * dy * massj / rho_j * particlesa.bweight[i][j];
-				a24 += dx * dx * dy * dy * massj / rho_j * particlesa.bweight[i][j];
-				/*matrix[3][0] = matrix[0][3];
-				matrix[3][1] = matrix[1][3];
-				matrix[3][2] = matrix[2][3];
-				matrix[3][3] = matrix[2][4];
-				matrix[3][4] += dx * dy * dy * dy * massj / rho_j * particlesa.bweight[i][j];*/
-				a34 += dx * dy * dy * dy * massj / rho_j * particlesa.bweight[i][j];
-				/*matrix[4][0] = matrix[0][4];
-				matrix[4][1] = matrix[1][4];
-				matrix[4][2] = matrix[2][4];
-				matrix[4][3] = matrix[3][4];
-				matrix[4][4] += dy * dy * dy * dy * massj / rho_j * particlesa.bweight[i][j];*/
-				a44 += dy * dy * dy * dy * massj / rho_j * particlesa.bweight[i][j];
-				//M矩阵为12个孤立的变量
-			}
-			matrix[0][0] = a00;
-			matrix[0][1] = a01;
-			matrix[0][2] = a02;
-			matrix[0][3] = a03;
-			matrix[0][4] = a04;
-			matrix[1][0] = matrix[0][1]; matrix[1][1] = a11; matrix[1][2] = matrix[0][3]; matrix[1][3] = matrix[0][4]; matrix[1][4] = a14;
-			matrix[2][0] = matrix[0][2]; matrix[2][1] = matrix[1][2]; matrix[2][2] = a22; matrix[2][3] = a23; matrix[2][4] = a24;
-			matrix[3][0] = matrix[0][3]; matrix[3][1] = matrix[1][3]; matrix[3][2] = matrix[2][3]; matrix[3][3] = matrix[2][4]; matrix[3][4] = a34;
-			matrix[4][0] = matrix[0][4]; matrix[4][1] = matrix[1][4]; matrix[4][2] = matrix[2][4]; matrix[4][3] = matrix[3][4]; matrix[4][4] = a44;
-			//一阶
-			//const double det = k_11 * k_22 - k_12 * k_21;
-			//const double det = matrix[0][0] * matrix[1][1] - matrix[0][1] * matrix[0][1];
-			const double det = a00 * a11 - a01 * a01;
-			/*m_11 = k_22 / det;
-			m_12 = -k_12 / det;
-			m_21 = -k_21 / det;
-			m_22 = k_11 / det;*/
-			m_11 = matrix[1][1] / det;
-			m_12 = -matrix[0][1] / det;
-			m_21 = m_12;
-			m_22 = matrix[0][0] / det;
-			particlesa.m_11[i] = m_11;//k矩阵求逆
-			particlesa.m_12[i] = m_12;
-			particlesa.m_21[i] = m_21;
-			particlesa.m_22[i] = m_22;    
-			// 二阶
-			//求逆
-			inverseMatrix(matrix, inverse, size); 
-			/*std::cout << "Inverse matrix of particle" <<i<< std::endl;
-			displayMatrix(inverse, size);*/						
-			particlesa.M_11[i] = inverse[0][0];
-			particlesa.M_12[i] = inverse[0][1];
-			particlesa.M_13[i] = inverse[0][2];
-			particlesa.M_14[i] = inverse[0][3];
-			particlesa.M_15[i] = inverse[0][4];
-			particlesa.M_21[i] = inverse[1][0];
-			particlesa.M_22[i] = inverse[1][1];
-			particlesa.M_23[i] = inverse[1][2];
-			particlesa.M_24[i] = inverse[1][3];
-			particlesa.M_25[i] = inverse[1][4];
-			particlesa.M_31[i] = inverse[2][0];//M的二阶逆矩阵的部分元素
-			particlesa.M_32[i] = inverse[2][1];
-			particlesa.M_33[i] = inverse[2][2];
-			particlesa.M_34[i] = inverse[2][3];
-			particlesa.M_35[i] = inverse[2][4];
-			particlesa.M_51[i] = inverse[4][0];
-			particlesa.M_52[i] = inverse[4][1];
-			particlesa.M_53[i] = inverse[4][2];
-			particlesa.M_54[i] = inverse[4][3];
-			particlesa.M_55[i] = inverse[4][4];
-		}//end circle i
+
 
 		// boundary viscosity due to no-slip condition -----------------------------对边界的计算，算了边界的黏性力
 #ifdef OMP_USE

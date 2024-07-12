@@ -1439,3 +1439,294 @@ void density_filter_dev0(unsigned int particleNum, sph::BoundaryType* btype, dou
 	density_filter_dev1<<<32,512>>>(particleNum, btype, Hsml, neibNum, neiblist, press, back_p, c0, rho0, mass, rho, bweight);
 	CHECK(cudaDeviceSynchronize());
 }
+
+//修改single_step_temperature_gaojie()
+__device__ void inverseMatrix_d(double matrix[][5], double inverse[][5], int size) {
+	// 创建增广矩阵
+	double augmented[5][2 * 5];
+	for (int i = 0; i < size; i++) {
+		for (int j = 0; j < size; j++) {
+			augmented[i][j] = matrix[i][j];
+			augmented[i][j + size] = (i == j) ? 1 : 0;
+		}
+	}
+
+	// 对矩阵进行初等行变换操作，将左侧变成单位矩阵
+	for (int i = 0; i < size; i++) {
+		// 将第i行的第i列元素缩放到1
+		double pivot = augmented[i][i];
+		for (int j = 0; j < size * 2; j++) {
+			augmented[i][j] /= pivot;
+		}
+
+		// 将其他行第i列元素变为0
+		for (int j = 0; j < size; j++) {
+			if (j != i) {
+				double factor = augmented[j][i];
+				for (int k = 0; k < size * 2; k++) {
+					augmented[j][k] -= factor * augmented[i][k];
+				}
+			}
+		}
+	}
+
+	// 从增广矩阵中提取逆矩阵
+	for (int i = 0; i < size; i++) {
+		for (int j = 0; j < size; j++) {
+			inverse[i][j] = augmented[i][j + size];
+		}
+	}
+}
+
+
+__global__ void single_temp_eos_dev1(unsigned int particleNum, sph::BoundaryType* btype, double* C0, double* Rho0, double* rho, double* Gamma, double* back_p, double* press) {
+	for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < particleNum; i += gridDim.x * blockDim.x)
+	{
+		if (btype[i] == sph::BoundaryType::Boundary) continue;
+		const double c0 = C0[i];
+		const double rho0 = Rho0[i];
+		const double rhoi = rho[i];
+		const double gamma = Gamma[i];
+		const double b = c0 * c0 * rho0 / gamma;     //b--B,
+		const double p_back = back_p[i];
+		//			if (particlesa.iotype[i] == InoutType::Inlet) {
+		//				// interpolation
+		//				double p = 0;
+		//				double pmax = DBL_MIN;
+		//				double vcc = 0;
+		//#ifdef OMP_USE
+		//#pragma omp parallel for schedule (guided) reduction(+:p,vcc)
+		//#endif
+		//				for (int j = 0; j < ii->neiblist.size(); j++)
+		//				{
+		//					const int jj = particlesa.neiblist[i][j];
+		//					if (particlesa.iotype[i] == particlesa.iotype[jj]) continue;
+		//					const double mass_j = particlesa.mass[jj];
+		//					const double rho_j = particlesa.rho[jj];
+		//					const double p_k = particlesa.press[jj];
+		//					p += p_k * particlesa.bweight[i][j];
+		//					vcc += particlesa.bweight[i][j];					
+		//				}
+		//				p = vcc > 0.00000001 ? p / vcc : 0;				
+		//				particlesa.vcc[i] = vcc;
+		//				particlesa.press[i] = p; // inlet部分的压力是做的插值求得，按道理应该略大于右边粒子的压力，才会产生推的作用。
+		//				//particlesa.press[i] = 0;			
+		//			}
+		//			else
+					//inlet和outlet的压力应该单独设置
+		press[i] = b * (pow(rhoi / rho0, gamma) - 1.0) + p_back;      // 流体区
+
+		if (press[i] < p_back)
+			press[i] = p_back;
+	}
+
+}
+
+__global__ void single_temp_boundary_dev1(unsigned int particleNum, sph::BoundaryType* btype, unsigned int* neibNum, unsigned int** neiblist, sph::FixType* ftype, double* mass, double* rho\
+											, double* press, double** bweight, double* vx, double* vy, double* Vcc) {
+	for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < particleNum; i += gridDim.x * blockDim.x)
+	{
+		//particle* ii = particles[i];
+		if (btype[i] != sph::BoundaryType::Boundary) continue;
+		//if (particlesa.iotype[i] == sph::InoutType::Buffer) continue;			
+		double p = 0, vcc = 0;
+		double v_x = 0, v_y = 0;
+
+		for (int j = 0; j < neibNum[i]; j++)
+		{
+			const int jj = neiblist[i][j];
+			//if (btype[i] == btype[jj]) continue;//Buffer粒子也在这里，导致流出边界固壁的压力不正常
+			if (ftype[jj] == sph::FixType::Fixed) continue;//其他固壁粒子不参与，ghost不参与，buffer参与
+			const double mass_j = mass[jj];
+			const double rho_j = rho[jj];
+			const double p_k = press[jj];
+			p += p_k * bweight[i][j];//
+			vcc += bweight[i][j];
+			v_x += vx[jj] * bweight[i][j];//需要将速度沿法线分解，还没分
+			v_y += vy[jj] * bweight[i][j];
+		}
+		p = vcc > 0.00000001 ? p / vcc : 0;//p有值
+		v_x = vcc > 0.00000001 ? v_x / vcc : 0;//v_x一直为0！待解决
+		v_y = vcc > 0.00000001 ? v_y / vcc : 0;
+		double vx0 = 0;
+		double vy0 = 0;
+		Vcc[i] = vcc;
+		press[i] = p;
+		vx[i] = 2.0 * vx0 - v_x;//无滑移，要改成径向，切向
+		vy[i] = 2.0 * vy0 - v_y;
+	}
+
+}
+
+__global__ void single_temp_shapematrix_dev1(unsigned int particleNum, sph::BoundaryType* btype, double* rho, double* Hsml, double* x, double* y, unsigned int* neibNum, unsigned int** neiblist\
+											, double** bweight, sph::InoutType* iotype, double lengthofx, double* mass, double* m_11, double* m_12, double* m_21, double* m_22, double* M_11\
+											, double* M_12, double* M_13, double* M_14, double* M_15, double* M_21, double* M_22, double* M_23, double* M_24, double* M_25\
+											, double* M_31, double* M_32, double* M_33, double* M_34, double* M_35, double* M_51, double* M_52, double* M_53, double* M_54, double* M_55) {
+	for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < particleNum; i += gridDim.x * blockDim.x)
+	{
+		if (btype[i] == sph::BoundaryType::Boundary) continue;//边界粒子没有计算M矩阵
+		const double rho_i = rho[i];
+		const double hsml = Hsml[i];
+		const double xi = x[i];
+		const double yi = y[i];
+		double k_11 = 0;//K
+		double k_12 = 0;
+		double k_21 = 0;
+		double k_22 = 0;
+		double m_11t = 0;
+		double m_12t = 0;
+		double m_21t = 0;
+		double m_22t = 0;
+		double matrix[5][5];//M矩阵
+		double inverse[5][5];//逆矩阵			
+		int size = 5;
+		matrix[0][0] = matrix[0][1] = matrix[0][2] = matrix[0][3] = matrix[0][4] = 0;
+		matrix[1][0] = matrix[1][1] = matrix[1][2] = matrix[1][3] = matrix[1][4] = 0;
+		matrix[2][0] = matrix[2][1] = matrix[2][2] = matrix[2][3] = matrix[2][4] = 0;
+		matrix[3][0] = matrix[3][1] = matrix[3][2] = matrix[3][3] = matrix[3][4] = 0;
+		matrix[4][0] = matrix[4][1] = matrix[4][2] = matrix[4][3] = matrix[4][4] = 0;
+		//将每个元素的值代入矩阵，创建M矩阵
+		double a00 = 0; double a01 = 0; double a02 = 0; double a03 = 0; double a04 = 0;
+		double a11 = 0; double a14 = 0;
+		double a22 = 0; double a23 = 0; double a24 = 0;
+		double a34 = 0; double a44 = 0;
+
+
+		for (int j = 0; j < neibNum[i]; j++)
+		{
+			const int jj = neiblist[i][j];
+			if (bweight[i][j] < 0.000000001) continue;
+			const double xj = x[jj];
+			const double yj = y[jj];
+			double dx = xj - xi;
+			double dy = yj - yi;
+			if (iotype[i] == sph::InoutType::Inlet && iotype[jj] == sph::InoutType::Outlet)
+			{
+				dx = x[jj] - x[i] - lengthofx;//xi(1)
+			}
+			if (iotype[i] == sph::InoutType::Outlet && iotype[jj] == sph::InoutType::Inlet)
+			{
+				dx = x[jj] - x[i] + lengthofx;//xi(1)
+			}
+			const double rho_j = rho[jj];
+			const double massj = mass[jj];
+			//一阶
+			//k_11 += dx * dx * massj / rho_j * bweight[i][j];	//k11
+			//k_12 += dx * dy * massj / rho_j * bweight[i][j];//k_12=k_21
+			//k_21 += dy * dx * massj / rho_j * bweight[i][j];
+			//k_22 += dy * dy * massj / rho_j * bweight[i][j];
+			//二阶 matrix[0][0]=k_11
+			/*matrix[0][0] += dx * dx * massj / rho_j * bweight[i][j];
+			matrix[0][1] += dx * dy * massj / rho_j * bweight[i][j];
+			matrix[0][2] += dx * dx * dx * massj / rho_j * bweight[i][j];
+			matrix[0][3] += dx * dx * dy * massj / rho_j * bweight[i][j];
+			matrix[0][4] += dx * dy * dy * massj / rho_j * bweight[i][j];*/
+			a00 += dx * dx * massj / rho_j * bweight[i][j];// = k11
+			a01 += dx * dy * massj / rho_j * bweight[i][j];// = k12 = k_21
+			a02 += dx * dx * dx * massj / rho_j * bweight[i][j];
+			a03 += dx * dx * dy * massj / rho_j * bweight[i][j];
+			a04 += dx * dy * dy * massj / rho_j * bweight[i][j];
+			/*matrix[1][0] = matrix[0][1];
+			matrix[1][1] += dy * dy * massj / rho_j * bweight[i][j];
+			matrix[1][2] = matrix[0][3];
+			matrix[1][3] = matrix[0][4];
+			matrix[1][4] += dy * dy * dy * massj / rho_j * bweight[i][j];*/
+			a11 += dy * dy * massj / rho_j * bweight[i][j];// = k22
+			a14 += dy * dy * dy * massj / rho_j * bweight[i][j];
+			/*matrix[2][0] = matrix[0][2];
+			matrix[2][1] = matrix[1][2];
+			matrix[2][2] += dx * dx * dx * dx * massj / rho_j * bweight[i][j];
+			matrix[2][3] += dx * dx * dx * dy * massj / rho_j * bweight[i][j];
+			matrix[2][4] += dx * dx * dy * dy * massj / rho_j * bweight[i][j];*/
+			a22 += dx * dx * dx * dx * massj / rho_j * bweight[i][j];
+			a23 += dx * dx * dx * dy * massj / rho_j * bweight[i][j];
+			a24 += dx * dx * dy * dy * massj / rho_j * bweight[i][j];
+			/*matrix[3][0] = matrix[0][3];
+			matrix[3][1] = matrix[1][3];
+			matrix[3][2] = matrix[2][3];
+			matrix[3][3] = matrix[2][4];
+			matrix[3][4] += dx * dy * dy * dy * massj / rho_j * bweight[i][j];*/
+			a34 += dx * dy * dy * dy * massj / rho_j * bweight[i][j];
+			/*matrix[4][0] = matrix[0][4];
+			matrix[4][1] = matrix[1][4];
+			matrix[4][2] = matrix[2][4];
+			matrix[4][3] = matrix[3][4];
+			matrix[4][4] += dy * dy * dy * dy * massj / rho_j * bweight[i][j];*/
+			a44 += dy * dy * dy * dy * massj / rho_j * bweight[i][j];
+			//M矩阵为12个孤立的变量
+		}
+		matrix[0][0] = a00;
+		matrix[0][1] = a01;
+		matrix[0][2] = a02;
+		matrix[0][3] = a03;
+		matrix[0][4] = a04;
+		matrix[1][0] = matrix[0][1]; matrix[1][1] = a11; matrix[1][2] = matrix[0][3]; matrix[1][3] = matrix[0][4]; matrix[1][4] = a14;
+		matrix[2][0] = matrix[0][2]; matrix[2][1] = matrix[1][2]; matrix[2][2] = a22; matrix[2][3] = a23; matrix[2][4] = a24;
+		matrix[3][0] = matrix[0][3]; matrix[3][1] = matrix[1][3]; matrix[3][2] = matrix[2][3]; matrix[3][3] = matrix[2][4]; matrix[3][4] = a34;
+		matrix[4][0] = matrix[0][4]; matrix[4][1] = matrix[1][4]; matrix[4][2] = matrix[2][4]; matrix[4][3] = matrix[3][4]; matrix[4][4] = a44;
+		//一阶
+		//const double det = k_11 * k_22 - k_12 * k_21;
+		//const double det = matrix[0][0] * matrix[1][1] - matrix[0][1] * matrix[0][1];
+		const double det = a00 * a11 - a01 * a01;
+		/*m_11 = k_22 / det;
+		m_12 = -k_12 / det;
+		m_21 = -k_21 / det;
+		m_22 = k_11 / det;*/
+		m_11t = matrix[1][1] / det;
+		m_12t = -matrix[0][1] / det;
+		m_21t = m_12t;
+		m_22t = matrix[0][0] / det;
+		m_11[i] = m_11t;//k矩阵求逆
+		m_12[i] = m_12t;
+		m_21[i] = m_21t;
+		m_22[i] = m_22t;
+		// 二阶
+		//求逆
+		inverseMatrix_d(matrix, inverse, size);
+		/*std::cout << "Inverse matrix of particle" <<i<< std::endl;
+		displayMatrix(inverse, size);*/
+		M_11[i] = inverse[0][0];
+		M_12[i] = inverse[0][1];
+		M_13[i] = inverse[0][2];
+		M_14[i] = inverse[0][3];
+		M_15[i] = inverse[0][4];
+		M_21[i] = inverse[1][0];
+		M_22[i] = inverse[1][1];
+		M_23[i] = inverse[1][2];
+		M_24[i] = inverse[1][3];
+		M_25[i] = inverse[1][4];
+		M_31[i] = inverse[2][0];//M的二阶逆矩阵的部分元素
+		M_32[i] = inverse[2][1];
+		M_33[i] = inverse[2][2];
+		M_34[i] = inverse[2][3];
+		M_35[i] = inverse[2][4];
+		M_51[i] = inverse[4][0];
+		M_52[i] = inverse[4][1];
+		M_53[i] = inverse[4][2];
+		M_54[i] = inverse[4][3];
+		M_55[i] = inverse[4][4];
+	}//end circle i
+}
+
+void single_temp_eos_dev0(unsigned int particleNum, sph::BoundaryType* btype, double* C0, double* Rho0, double* rho, double* Gamma, double* back_p, double* press) {
+	single_temp_eos_dev1<<<32,512>>>(particleNum, btype, C0, Rho0, rho, Gamma, back_p, press);
+	CHECK(cudaDeviceSynchronize());
+}
+
+void single_temp_boundary_dev0(unsigned int particleNum, sph::BoundaryType* btype, unsigned int* neibNum, unsigned int** neiblist, sph::FixType* ftype, double* mass, double* rho\
+	, double* press, double** bweight, double* vx, double* vy, double* Vcc) {
+	single_temp_boundary_dev1<<<32,512>>>(particleNum, btype, neibNum, neiblist, ftype, mass, rho\
+		, press, bweight, vx, vy, Vcc);
+	CHECK(cudaDeviceSynchronize());
+}
+
+void single_temp_shapematrix_dev0(unsigned int particleNum, sph::BoundaryType* btype, double* rho, double* Hsml, double* x, double* y, unsigned int* neibNum, unsigned int** neiblist\
+	, double** bweight, sph::InoutType* iotype, double lengthofx, double* mass, double* m_11, double* m_12, double* m_21, double* m_22, double* M_11\
+	, double* M_12, double* M_13, double* M_14, double* M_15, double* M_21, double* M_22, double* M_23, double* M_24, double* M_25\
+	, double* M_31, double* M_32, double* M_33, double* M_34, double* M_35, double* M_51, double* M_52, double* M_53, double* M_54, double* M_55) {
+	single_temp_shapematrix_dev1 << <32, 512 >> > (particleNum, btype, rho, Hsml, x, y, neibNum, neiblist\
+		, bweight, iotype, lengthofx, mass, m_11, m_12, m_21, m_22, M_11\
+		, M_12, M_13, M_14, M_15, M_21, M_22, M_23, M_24, M_25\
+		, M_31, M_32, M_33, M_34, M_35, M_51, M_52, M_53, M_54, M_55);
+	CHECK(cudaDeviceSynchronize());
+}

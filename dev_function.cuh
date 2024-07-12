@@ -165,3 +165,30 @@ void run_shifttype_velc_dev0(unsigned int particleNum, sph::BoundaryType* btype,
 
 void density_filter_dev0(unsigned int particleNum, sph::BoundaryType* btype, double* Hsml, unsigned int* neibNum, unsigned int** neiblist, double* press\
 	, double* back_p, double* c0, double* rho0, double* mass, double* rho, double** bweight);
+
+
+//修改single_step_temperature_gaojie()
+
+__global__ void single_temp_eos_dev1(unsigned int particleNum, sph::BoundaryType* btype, double* C0, double* Rho0, double* rho, double* Gamma, double* back_p, double* press);
+
+__global__ void single_temp_boundary_dev1(unsigned int particleNum, sph::BoundaryType* btype, unsigned int* neibNum, unsigned int** neiblist, sph::FixType* ftype, double* mass, double* rho\
+	, double* press, double** bweight, double* vx, double* vy, double* Vcc);
+
+__global__ void single_temp_shapematrix_dev1(unsigned int particleNum, sph::BoundaryType* btype, double* rho, double* Hsml, double* x, double* y, unsigned int* neibNum, unsigned int** neiblist\
+	, double** bweight, sph::InoutType* iotype, double lengthofx, double* mass, double* m_11, double* m_12, double* m_21, double* m_22, double* M_11\
+	, double* M_12, double* M_13, double* M_14, double* M_15, double* M_21, double* M_22, double* M_23, double* M_24, double* M_25\
+	, double* M_31, double* M_32, double* M_33, double* M_34, double* M_35, double* M_51, double* M_52, double* M_53, double* M_54, double* M_55);
+
+
+
+
+
+void single_temp_eos_dev0(unsigned int particleNum, sph::BoundaryType* btype, double* C0, double* Rho0, double* rho, double* Gamma, double* back_p, double* press);
+
+void single_temp_boundary_dev0(unsigned int particleNum, sph::BoundaryType* btype, unsigned int* neibNum, unsigned int** neiblist, sph::FixType* ftype, double* mass, double* rho\
+	, double* press, double** bweight, double* vx, double* vy, double* Vcc);
+
+void single_temp_shapematrix_dev0(unsigned int particleNum, sph::BoundaryType* btype, double* rho, double* Hsml, double* x, double* y, unsigned int* neibNum, unsigned int** neiblist\
+	, double** bweight, sph::InoutType* iotype, double lengthofx, double* mass, double* m_11, double* m_12, double* m_21, double* m_22, double* M_11\
+	, double* M_12, double* M_13, double* M_14, double* M_15, double* M_21, double* M_22, double* M_23, double* M_24, double* M_25\
+	, double* M_31, double* M_32, double* M_33, double* M_34, double* M_35, double* M_51, double* M_52, double* M_53, double* M_54, double* M_55);
