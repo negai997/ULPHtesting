@@ -314,6 +314,7 @@ __global__ void buildNeighb_dev2(unsigned int particleNum, double* X, double* Y,
 			grid_d[(xxcell - 1) * ngridy + yycell - 1] = i;// i starts from 0 //没理解这句什么意思？
 			//std::cerr << std::endl << "grid(xxcell, yycell): " << grid(xxcell, yycell) << std::endl;
 			atomicExch(lock, 0);
+			__threadfence();
 		}
 
 	}
@@ -1315,8 +1316,8 @@ void buildNeighb_dev02(unsigned int particleNum, double* X, double* Y, unsigned 
 	int* lock;
 	cudaMallocManaged(&lock,sizeof(int));
 	*lock = 0;
-	buildNeighb_dev2 << <1, 512 >> > ( particleNum, X, Y, neiblist, neibNum, ngridx, ngridy, dxrange, dyrange, x_min, y_min, xgcell, ygcell, celldata, grid_d, lock);
-	CHECK(cudaDeviceSynchronize());
+	buildNeighb_dev2 << <32, 512 >> > ( particleNum, X, Y, neiblist, neibNum, ngridx, ngridy, dxrange, dyrange, x_min, y_min, xgcell, ygcell, celldata, grid_d, lock);
+	//CHECK(cudaDeviceSynchronize());
 	buildNeighb_dev3 << <32, 512 >> > (particleNum, X, Y, neiblist, neibNum, Hsml, ngridx, ngridy, dxrange, dyrange, idx, iotype, xgcell, ygcell, celldata, grid_d, lengthofx);
 	CHECK(cudaDeviceSynchronize());
 	//printf("particle_1's neighberNum is %d\n", neibNum[0]);
@@ -1345,7 +1346,7 @@ void run_half2_dev0(unsigned int particleNum, double* half_x, double* half_y, do
 void singlestep_rhoeos_dev0(unsigned int particleNum, sph::BoundaryType* btype, double* rho, double* rho_min, double* c0, double* rho0, double* gamma, double* back_p, double* press) {
 
 	singlestep_rhofilter_dev1<<<32,512>>>(particleNum, btype, rho, rho_min);
-	singlestep_eos_dev1<<<32,32>>>(particleNum, btype, c0, rho0, rho, gamma, back_p, press);
+	singlestep_eos_dev1<<<32,512>>>(particleNum, btype, c0, rho0, rho, gamma, back_p, press);
 	//CHECK(cudaDeviceSynchronize());
 }
 
