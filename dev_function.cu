@@ -1708,6 +1708,520 @@ __global__ void single_temp_shapematrix_dev1(unsigned int particleNum, sph::Boun
 	}//end circle i
 }
 
+__global__ void single_temp_bdvisco_dev1(unsigned int particleNum, sph::BoundaryType* btype, double* rho, double* Hsml, double* x, double* y, unsigned int* neibNum, unsigned int** neiblist\
+										, double** bweight, sph::InoutType* iotype, double lengthofx, double** wMxijx, double** wMxijy, double* m_11, double* m_12, double* m_21, double* m_22\
+										, double* press, double* vx, double* vy, double* mass, double* Tau11, double* Tau12, double* Tau21, double* Tau22, sph::FluidType* fltype, double dp\
+										, double C_s, double* turb11, double* turb12, double* turb21, double* turb22) {
+	for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < particleNum; i += gridDim.x * blockDim.x)
+	{
+		if (btype[i] != sph::BoundaryType::Boundary) continue;//存在一个边界缺失的问题：边界的邻域是不全的，所以算的边界的黏性力其实也不准确
+		const double rho_i = rho[i];
+		const double hsml = Hsml[i];
+		const double xi = x[i];
+		const double yi = y[i];
+
+		//--------wMxij-------
+		for (int j = 0; j < neibNum[i]; j++)
+		{
+			const int jj = neiblist[i][j];
+			if (bweight[i][j] < 0.000000001) continue;
+			const double xj = x[jj];
+			const double yj = y[jj];
+			double dx = xj - xi;
+			double dy = yj - yi;
+			if (iotype[i] == sph::InoutType::Inlet && iotype[jj] == sph::InoutType::Outlet)
+			{
+				dx = x[jj] - x[i] - lengthofx;//xi(1)
+			}
+			if (iotype[i] == sph::InoutType::Outlet && iotype[jj] == sph::InoutType::Inlet)
+			{
+				dx = x[jj] - x[i] + lengthofx;//xi(1)
+			}
+
+			wMxijx[i][j] = (m_11[i] * dx + m_12[i] * dy) * bweight[i][j]; //m_12[i]可能等于0
+			wMxijy[i][j] = (m_21[i] * dx + m_22[i] * dy) * bweight[i][j];
+		}
+		//if (btype[i] != sph::BoundaryType::Boundary) continue;
+
+		double epsilon_2_11 = 0;
+		double epsilon_2_12 = 0;
+		double epsilon_2_21 = 0;
+		double epsilon_2_22 = 0;     //=dudx11
+		double epsilon_3 = 0;
+		double epsilon_dot11 = 0;
+		double epsilon_dot12 = 0;
+		double epsilon_dot21 = 0;
+		double epsilon_dot22 = 0;
+		double tau11 = 0;
+		double tau12 = 0;
+		double tau21 = 0;
+		double tau22 = 0;
+
+		const double p_i = press[i];
+
+
+		for (int j = 0; j < neibNum[i]; j++)
+		{
+			const int jj = neiblist[i][j];
+			if (btype[jj] == sph::BoundaryType::Boundary) continue;
+			if (bweight[i][j] < 0.000000001) continue;
+			const double xj = x[jj];
+			const double yj = y[jj];
+			double dx = xj - xi;
+			double dy = yj - yi;
+			if (iotype[i] == sph::InoutType::Inlet && iotype[jj] == sph::InoutType::Outlet)
+			{
+				dx = x[jj] - x[i] - lengthofx;//xi(1)
+			}
+			if (iotype[i] == sph::InoutType::Outlet && iotype[jj] == sph::InoutType::Inlet)
+			{
+				dx = x[jj] - x[i] + lengthofx;//xi(1)
+			}
+			const double r2 = dx * dx + dy * dy;
+			const double rho_j = rho[jj];
+			const double rho_ij = rho_j - rho_i;
+			const double diffx = rho_ij * dx / r2;
+			const double diffy = rho_ij * dx / r2;
+			//const double dvx = vx[jj] - ((ii)->bctype == BoundaryConditionType::NoSlip ? vx[i] : 0);
+			//const double dvy = vy[jj] - ((ii)->bctype == BoundaryConditionType::NoSlip ? vy[i] : 0);
+			const double dvx = vx[jj] - vx[i];
+			const double dvy = vy[jj] - vy[i];
+			const double massj = mass[jj];
+
+			double epsilon_dot11 = 0;
+			double epsilon_dot12 = 0;
+			double epsilon_dot21 = 0;
+			double epsilon_dot22 = 0;
+			double tau11 = 0;
+			double tau12 = 0;
+			double tau21 = 0;
+			double tau22 = 0;
+			double temp_ik11 = 0;
+			double temp_ik12 = 0;
+			double temp_ik21 = 0;
+			double temp_ik22 = 0;
+
+			const double A_1 = dvx * wMxijx[i][j] + dvy * wMxijy[i][j];
+
+			epsilon_2_11 += dvx * wMxijx[i][j] * massj / rho_j;//du/dx
+			epsilon_2_12 += dvx * wMxijy[i][j] * massj / rho_j;//du/dy
+			epsilon_2_21 += dvy * wMxijx[i][j] * massj / rho_j;//dv/dx
+			epsilon_2_22 += dvy * wMxijy[i][j] * massj / rho_j;//dv/dy			
+		}//end circle j
+
+		 //epsilon_second= -1./3.* epsilon_3;//*��λ����
+
+			//epsilon_temp(11)= epsilon_2(11) * m_11[i] + epsilon_2(12) * m_21[i];
+			//epsilon_temp(12)= epsilon_2(11) * m_12[i] + epsilon_2(12) * m_22[i];
+			//epsilon_temp(21)= epsilon_2(21) * m_11[i] + epsilon_2(22) * m_21[i];
+			//epsilon_temp(22)= epsilon_2(21) * m_12[i] + epsilon_2(22) * m_22[i];
+
+			//epsilon_dot=0.5*(epsilon_temp+transpose(epsilon_temp))+epsilon_second  !�ܵ�epsilon,����������ȣ�û��epsilon_second
+		/*epsilon_dot11 = epsilon_2_11 * m_11[i] + epsilon_2_12 * m_21[i] - 1. / 3. * epsilon_3;
+		epsilon_dot12 = ((epsilon_2_11 * m_12[i] + epsilon_2_12 * m_22[i]) + (epsilon_2_21 * m_11[i] + epsilon_2_22 * m_21[i])) * 0.5;
+		epsilon_dot21 = epsilon_dot12;
+		epsilon_dot22 = epsilon_2_21 * m_12[i] + epsilon_2_22 * m_22[i] - 1. / 3. * epsilon_3;*/
+		epsilon_dot11 = epsilon_2_11;
+		epsilon_dot12 = 0.5 * (epsilon_2_12 + epsilon_2_21);
+		epsilon_dot21 = epsilon_dot12;
+		epsilon_dot22 = epsilon_2_22;
+		//边界粒子的物理黏性项tau： 比较重要！
+		Tau11[i] = 2. * Viscosity(fltype[i]) * epsilon_dot11;//边界粒子的黏性力
+		Tau12[i] = 2. * Viscosity(fltype[i]) * epsilon_dot12;
+		Tau21[i] = 2. * Viscosity(fltype[i]) * epsilon_dot21;
+		Tau22[i] = 2. * Viscosity(fltype[i]) * epsilon_dot22;
+
+		//double dist = 0;
+		//const double y1 = indiameter;//height
+		//const double R = sqrt((xi - 0.2 * y1) * (xi - 0.2 * y1) + yi * yi) - 3 * 0.004;//粒子距圆柱的距离
+		//const double L1 = 0.5 * y1 - abs(yi);
+		////const double L1 = abs(0.5 * y1 - yi);
+		//const double L2 = std::min(xi + 0.08, inlen - xi);
+		////const double L2 = abs(yi - 0.5 * y1);
+		//double temp = std::min(R, L1);//dwall
+		//dist = std::min(temp, L2);
+		//if (dist < 0) {
+		//	dist = 0;
+		//}
+		const double dvdx11 = epsilon_2_11;          // dudx11=epsilon_dot11
+		const double dvdx12 = 0.5 * (epsilon_2_12 + epsilon_2_21);
+		const double dvdx21 = dvdx12;
+		const double dvdx22 = epsilon_2_22;
+		const double s1ij = sqrt(2.0 * (dvdx11 * dvdx11 + dvdx12 * dvdx12 + dvdx21 * dvdx21 + dvdx22 * dvdx22));
+
+		const double mut = dp * dp * C_s * C_s * s1ij;
+		//const double kenergy = C_v / C_e * dp * dp * s1ij * s1ij;    //Ksps=K_turb
+		const double kenergy = (vx[i] * vx[i] + vy[i] * vy[i]) * 0.5;
+		turb11[i] = 2.0 * mut * dvdx11 * rho_i - 2.0 / 3.0 * kenergy * rho_i;//����tao= ( 2*Vt*Sij-2/3Ksps*�����˺��� )*rho_i// �൱��turbulence(:,:,i)
+		turb12[i] = 2.0 * mut * dvdx12 * rho_i;
+		turb21[i] = 2.0 * mut * dvdx21 * rho_i;
+		turb22[i] = 2.0 * mut * dvdx22 * rho_i - 2.0 / 3.0 * kenergy * rho_i;
+	}//end circle i
+}
+
+__global__ void single_step_fluid_dev1(unsigned int particleNum, sph::BoundaryType* btype, double* rho, double* Hsml, double* x, double* y, unsigned int* neibNum, unsigned int** neiblist\
+	, double** bweight, sph::InoutType* iotype, double lengthofx, double** wMxijx, double** wMxijy, double* m_11, double* m_12, double* m_21, double* m_22\
+	, double* press, double* vx, double* vy, double* mass, double* tau11, double* tau12, double* tau21, double* tau22, sph::FluidType* fltype, double dp\
+	, double C_s, double* turb11, double* turb12, double* turb21, double* turb22, double* temperature, double* M_31, double* M_32, double* M_33, double* M_34, double* M_35\
+	, double* M_51, double* M_52, double* M_53, double* M_54, double* M_55, double* divvel, double* vort, sph::FixType* ftype, double* drho, double* temperature_x, double* temperature_t) {
+	for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < particleNum; i += gridDim.x * blockDim.x)
+	{
+		//particle* ii = particles[i];
+		const double xi = x[i];
+		const double yi = y[i];
+		const double rho_i = rho[i];
+		const double hsml = Hsml[i];
+		if (btype[i] == sph::BoundaryType::Boundary) continue;
+		//---------density----------
+
+		double drhodt = 0;
+		double drhodiff = 0;
+		//---------internal force-------柯西应力：压力+物理黏性力			
+		double epsilon_2_11 = 0;
+		double epsilon_2_12 = 0;
+		double epsilon_2_21 = 0;
+		double epsilon_2_22 = 0;     //=dudx11
+		//double epsilon_3 = 0;
+		double epsilon_dot11 = 0;
+		double taoxx = 0;
+		double taoyy = 0;
+		double epsilon_dot12 = 0;
+		double epsilon_dot21 = 0;
+		double epsilon_dot22 = 0;
+		//double tau11 = 0;
+		//double tau12 = 0;
+		//double tau21 = 0;
+		//double tau22 = 0;
+		const double p_i = press[i];
+		//--------turbulence---------
+		double dudx11 = 0;//k
+		double dudx12 = 0;
+		double dudx21 = 0;
+		double dudx22 = 0;
+		double sij = 0;
+
+		//----temperature-----目前简化版的，ki和ci为常熟
+		const double ki = coefficient_heat(fltype[i]);
+		const double ci = specific_heat(fltype[i]);
+		double vcc_temperature_t = 0;
+#ifdef OMP_USE
+#pragma omp parallel for schedule (guided)
+#endif
+		//--------wMxij-------
+		for (int j = 0; j < neibNum[i]; j++)
+		{
+			const int jj = neiblist[i][j];
+			if (bweight[i][j] < 0.000000001) continue;
+			const double xj = x[jj];
+			const double yj = y[jj];
+			double dx = xj - xi;
+			double dy = yj - yi;
+			//周期边界
+			if (iotype[i] == sph::InoutType::Inlet && iotype[jj] == sph::InoutType::Outlet)
+			{
+				dx = x[jj] - x[i] - lengthofx;//xi(1)
+			}
+			if (iotype[i] == sph::InoutType::Outlet && iotype[jj] == sph::InoutType::Inlet)
+			{
+				dx = x[jj] - x[i] + lengthofx;;//xi(1)
+			}
+
+			wMxijx[i][j] = (m_11[i] * dx + m_12[i] * dy) * bweight[i][j];
+			wMxijy[i][j] = (m_21[i] * dx + m_22[i] * dy) * bweight[i][j];
+		}
+
+#ifdef OMP_USE
+#pragma omp parallel for schedule (guided) reduction(+:vcc_temperature_t,epsilon_2_11,epsilon_2_12,epsilon_dot21,epsilon_2_22)
+#endif
+		for (int j = 0; j < neibNum[i]; j++)
+		{
+			const int jj = neiblist[i][j];
+			if (bweight[i][j] < 0.000000001) continue;
+			const double rho_j = rho[jj];
+			const double xj = x[jj];
+			const double yj = y[jj];
+			double dx = xj - xi;
+			double dy = yj - yi;
+			if (iotype[i] == sph::InoutType::Inlet && iotype[jj] == sph::InoutType::Outlet)
+			{
+				dx = x[jj] - x[i] - lengthofx;//xi(1)
+			}
+			if (iotype[i] == sph::InoutType::Outlet && iotype[jj] == sph::InoutType::Inlet)
+			{
+				dx = x[jj] - x[i] + lengthofx;//xi(1)
+			}
+			const double r2 = dx * dx + dy * dy;
+			const double rho_ij = rho_j - rho_i;
+			const double dvx = vx[jj] - vx[i];
+			const double dvy = vy[jj] - vy[i];
+			const double massj = mass[jj];
+			//---------density---------- 
+			//const double vcc_diff = diffx * wMxijx[i][j] + diffy * wMxijy[i][j];//有问题
+			//const double vcc_rho = dvx * wMxijx[i][j] + dvy * wMxijy[i][j];//速度的散度
+			/*const double b1wMq = m_11[i] * dx + m_12[i] * dy + (ii)->m_13 * dx * dx + (ii)->m_14 * dx * dy + (ii)->m_15 * dy * dy;
+			const double b2wMq = m_21[i] * dx + m_22[i] * dy + (ii)->m_23 * dx * dx + (ii)->m_24 * dx * dy + (ii)->m_25 * dy * dy;
+			const double vcc_diff = diffx * b1wMq + diffy * b2wMq;
+			const double vcc_rho = dvx * b1wMq + dvy * b2wMq;*/
+			//const double chi = 0.2;
+			//drhodiff += bweight[i][j] * chi * c0[i] * hsml * vcc_diff * massj / rho_j;//密度耗散项the density diffusion term
+			//divv += vcc_rho * massj / rho_j;//速度散度
+			//drhodt += - rho_i * vcc_rho * massj / rho_j;//连续性方程已经结束！
+			//--------------------------------temperature---
+			const double kj = coefficient_heat(fltype[jj]);
+			const double kij = 0.5 * (ki + kj);
+			const double tij = temperature[jj] - temperature[i];
+			const double vcc_temperature_xx = M_31[i] * dx + M_32[i] * dy + M_33[i] * dx * dx + M_34[i] * dx * dy + M_35[i] * dy * dy;//高阶
+			const double vcc_temperature_yy = M_51[i] * dx + M_52[i] * dy + M_53[i] * dx * dx + M_54[i] * dx * dy + M_55[i] * dy * dy;
+
+			vcc_temperature_t += 2.0 * (vcc_temperature_xx + vcc_temperature_yy) * tij * bweight[i][j] * kij * mass[jj] / rho_j;//温度的拉普拉斯运算，传热方程已经结束！
+			//----------柯西应力--------   
+			double epsilon_dot11 = 0;
+			double epsilon_dot12 = 0;
+			double epsilon_dot21 = 0;
+			double epsilon_dot22 = 0;
+			//double tau11 = 0;
+			//double tau12 = 0;
+			//double tau21 = 0;
+			//double tau22 = 0;
+			double temp_ik11 = 0;
+			double temp_ik12 = 0;
+			double temp_ik21 = 0;
+			double temp_ik22 = 0;
+			//const double A_1 = dvx * wMxijx[i][j] + dvy * wMxijy[i][j];
+
+			//速度算子：2*2的张量
+			epsilon_2_11 += dvx * wMxijx[i][j] * massj / rho_j;//du/dx
+			epsilon_2_12 += dvx * wMxijy[i][j] * massj / rho_j;//du/dy
+			epsilon_2_21 += dvy * wMxijx[i][j] * massj / rho_j;//dv/dx
+			epsilon_2_22 += dvy * wMxijy[i][j] * massj / rho_j;//dv/dy  				
+		}	//end circle j
+		//---速度散度			
+		divvel[i] = epsilon_2_11 + epsilon_2_22;//弱可压缩，散度应该不会很大
+		//-------------------------------------黏性力----是一个2*2的张量  
+		/*taoxx = epsilon_2_11 - 1. / 3. * divvel[i];
+		taoyy = epsilon_2_22 - 1. / 3. * divvel[i];
+		epsilon_dot12 = (epsilon_2_12 + epsilon_2_21);
+		epsilon_dot21 = epsilon_dot12;	*/
+		//tau11[i] = 2. * sph::Fluid::Viscosity(fltype[i]) * taoxx;//taoxx
+		//tau12[i] = sph::Fluid::Viscosity(fltype[i]) * epsilon_dot12;//taoxy: Viscosity(dv/dx+du/dy)
+		//tau21[i] = tau12[i];//taoyx=taoxy
+		//tau22[i] = 2. * sph::Fluid::Viscosity(fltype[i]) * taoyy;//taoyy
+		//---------对于不可压缩，不再需要求粘性力，再求NS方程了。动量方程中只需要速度的拉普拉斯算子，暂时用一阶算法去求
+		//tau11[i] = epsilon_2_11;//这里的tau11代表速度的偏导
+		//tau12[i] = epsilon_2_12;//
+		//tau21[i] = epsilon_2_21;//
+		//tau22[i] = epsilon_2_22;//
+		// 
+		//-----现求柯西应力：sigema = p + tao
+		//对于不可压缩：黏性切应力 = 2. * sph::Fluid::Viscosity(fltype[i])* 应变
+		//应变为:[ du/dx 0.5*(du/dy+dv/dx) 0.5*(du/dy+dv/dx) dv/dy ]
+		tau11[i] = 2. * Viscosity(fltype[i]) * epsilon_2_11;//这里的tau11代表速度的偏导
+		tau12[i] = Viscosity(fltype[i]) * (epsilon_2_12 + epsilon_2_21);//
+		tau21[i] = tau12[i];//
+		tau22[i] = 2. * Viscosity(fltype[i]) * epsilon_2_22;//
+
+		//-----------------------------涡量 W=0.5(dudx-dvdy)    应变率张量（正应力张量）: S=0.5(dudx+dvdy) divvel
+		double Vort = 0.5 * (epsilon_2_21 - epsilon_2_12);
+		//vort[i] = (epsilon_2_21 - epsilon_2_12);
+		//运用Q准则 Q=0.5*(sqrt(W)-sqrt(S))
+		//vort[i] =0.5* (vort* vort - (0.5* divvel[i])* (0.5 * divvel[i]));
+		vort[i] = Vort;
+		//----------------------------Turbulence----先不管
+		//double dist = 0;
+		//const double y1 = indiameter;//height
+		//const double R = sqrt((xi - 0.2 * y1) * (xi - 0.2 * y1) + yi * yi) - 3 * 0.004;//粒子距圆柱的距离
+		//const double L1 = 0.5 * y1 - abs(yi);
+		////const double L1 = abs(0.5 * y1 - yi);
+		//const double L2 = std::min(xi + 0.08, inlen - xi);
+		////const double L2 = abs(yi - 0.5 * y1);
+		//double temp = std::min(R, L1);//dwall
+		//dist = std::min(temp, L2);
+		//if (dist < 0) {
+		//	dist = 0;
+		//}			
+		const double dvdx11 = epsilon_2_11;
+		const double dvdx12 = (epsilon_2_21 + epsilon_2_12) * 0.5;
+		const double dvdx21 = dvdx12;
+		const double dvdx22 = epsilon_2_22;
+		const double s1ij = sqrt(2.0 * (dvdx11 * dvdx11 + dvdx12 * dvdx12 + dvdx21 * dvdx21 + dvdx22 * dvdx22));
+		//const double mut = std::min(dist * dist * karman * karman, dp * dp * C_s * C_s) * s1ij;//mut=Vt:the turbulence eddy viscosity
+		const double mut = dp * dp * C_s * C_s * s1ij;
+		//const double kenergy = C_v / C_e * dp * dp * s1ij * s1ij; //Ksps=K_turb
+		//对于k的求法，不同的文献有不同的求法。
+		const double kenergy = (vx[i] * vx[i] + vy[i] * vy[i]) * 0.5;
+		turb11[i] = 2.0 * mut * dvdx11 * rho_i - 2.0 / 3.0 * kenergy * rho_i;//����tao= ( 2*Vt*Sij-2/3Ksps*�����˺��� )*rho_i// �൱��turbulence(:,:,i)
+		turb12[i] = 2.0 * mut * dvdx12 * rho_i;
+		turb21[i] = 2.0 * mut * dvdx21 * rho_i;
+		turb22[i] = 2.0 * mut * dvdx22 * rho_i - 2.0 / 3.0 * kenergy * rho_i;
+		//加上耗散函数：
+		const double fai = Viscosity(fltype[i]) * (2 * epsilon_2_11 * epsilon_2_11 +
+			2 * epsilon_2_22 * epsilon_2_22 + (epsilon_2_12 + epsilon_2_21) * (epsilon_2_12 + epsilon_2_21));
+		//连续性方程，温度方程
+		if (ftype[i] != sph::FixType::Fixed) {
+			//drho[i] = drhodt + drhodiff;
+			drho[i] = -rho[i] * divvel[i];
+			//double temp_t = vcc_temperature_t / rho[i] / ci;
+			//加耗散函数：
+			temperature_x[i] = fai;//用来查看值
+			double temp_t = (vcc_temperature_t + fai) / rho[i] / ci;
+			//if (temp_t == temp_t)
+			temperature_t[i] = temp_t;
+		}
+		else {
+			temperature_t[i] = 0;
+			drho[i] = 0;
+		}
+	}//end circle i
+
+}
+
+__global__ void single_step_fluid_eom_dev1(unsigned int particleNum, sph::BoundaryType* btype, double* rho, double* Hsml, double* x, double* y,double* C0,double* C\
+	, unsigned int* neibNum, unsigned int** neiblist, double** bweight, sph::InoutType* iotype, double lengthofx, double** wMxijx, double** wMxijy, double* ax, double* ay\
+	, double* m_11, double* m_12, double* m_21, double* m_22, double* press, double* vx, double* vy, double* mass, double* tau11, double* tau12, double* tau21, double* tau22\
+	, double* turb11, double* turb12, double* turb21, double* turb22, double* fintx, double* finty, sph::FixType* ftype, double* Avx, double* Avy, double* turbx, double* turby) {
+	for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < particleNum; i += gridDim.x * blockDim.x)
+	{
+		if (btype[i] == sph::BoundaryType::Boundary) continue;
+		const double rho_i = rho[i];
+		const double hsml = Hsml[i];
+		const double p_i = press[i];
+		const double xi = x[i];
+		const double yi = y[i];
+		const double c0 = C0[i];
+		const double c = C[i];
+		const double massi = mass[i];
+		//------对柯西应力求导-------			
+		double temp_sigemax = 0;//-px，求对x的偏导
+		double temp_sigemay = 0;//-py，求对y的偏导
+		double temp_taoxx = 0;
+		double temp_taoyy = 0;
+		double temp_taoxy = 0;//黏性力分量:taoxy对y的偏导
+		double temp_taoyx = 0;//黏性力分量:taoyx对x的偏导
+		//--------------------
+		//double turbx = 0;
+		//double turby = 0;
+		double turbxx = 0;
+		double turbyy = 0;
+		double turbxy = 0;//黏性力分量:taoxy对y的偏导
+		double turbyx = 0;//黏性力分量:taoyx对x的偏导
+		//----------artificial viscosity---
+		double avx = 0;
+		double avy = 0;
+
+		for (int j = 0; j < neibNum[i]; j++)
+		{
+			const int jj = neiblist[i][j];
+			if (bweight[i][j] < 0.000000001) continue;
+
+			const double xj = x[jj];
+			const double yj = y[jj];
+			double dx = xj - xi;
+			double dy = yj - yi;
+			if (iotype[i] == sph::InoutType::Inlet && iotype[jj] == sph::InoutType::Outlet)
+			{
+				dx = x[jj] - x[i] - lengthofx;//xi(1)
+			}
+			if (iotype[i] == sph::InoutType::Outlet && iotype[jj] == sph::InoutType::Inlet)
+			{
+				dx = x[jj] - x[i] + lengthofx;//xi(1)
+			}
+			const double hsmlj = Hsml[jj];
+			const double mhsml = (hsml + hsmlj) / 2;
+			const double r2 = dx * dx + dy * dy;
+			const double rho_j = rho[jj];
+			const double massj = mass[jj];
+
+			//wMxijx[i][j] = (m_11[i] * dx + m_12[i] * dy) * bweight[i][j];
+			//wMxijy[i][j] = (m_21[i] * dx + m_22[i] * dy) * bweight[i][j];
+
+			const double wMxijxV_iix = wMxijx[i][j] * massj / rho_j;
+			const double wMxijyV_iiy = wMxijy[i][j] * massj / rho_j;
+			//const double wMxijxV_jjx = (jj)->wMxijx[j] * massj / rho_j;//(jj)->wMxijx[j] 可能错了
+			//const double wMxijyV_jjy = (jj)->wMxijy[j] * massj / rho_j;
+			const double wMxijxV_jjx = (m_11[jj] * dx + m_12[jj] * dy) * bweight[i][j] * massj / rho_j;
+			const double wMxijyV_jjy = (m_21[jj] * dx + m_22[jj] * dy) * bweight[i][j] * massj / rho_j;
+			//-p的梯度
+			/*temp_px += ( p_i - press[jj] ) * wMxijxV_iix;
+			temp_py += ( p_i - press[jj] ) * wMxijyV_iiy;*/
+			//黏性切应力分量求导
+			//temp_taoxx += (tau11[jj] - tau11[i]) * wMxijxV_iix;//du/dx：uxx
+			//temp_taoyy += (tau22[jj] - tau22[i]) * wMxijyV_iiy;//dv/dy：vyy
+			//temp_taoxy += (tau12[jj] - tau12[i]) * wMxijxV_iix;//du/dy: uyy
+			//temp_taoyx += (tau21[jj] - tau21[i]) * wMxijyV_iiy;//dv/dx: vxx  
+			// 
+			//---------------现用柯西应力，态来表示动量方程---------------
+			//sigema_j = [ - p+txx txy tyx p+tyy ]
+			//j粒子----------------有边界粒子
+			const double sigema_j11 = -press[jj] + tau11[jj];//湍流力一样在这里加
+			const double sigema_j12 = tau12[jj];
+			const double sigema_j21 = tau21[jj];
+			const double sigema_j22 = -press[jj] + tau22[jj];
+			//i粒子
+			const double sigema_i11 = -p_i + tau11[i];
+			const double sigema_i12 = tau12[i];
+			const double sigema_i21 = tau21[i];
+			const double sigema_i22 = -p_i + tau22[i];
+			temp_sigemax += (sigema_j11 * wMxijxV_jjx + sigema_j12 * wMxijyV_jjy) + (sigema_i11 * wMxijxV_iix + sigema_j12 * wMxijyV_iiy);
+			temp_sigemay += (sigema_j21 * wMxijxV_jjx + sigema_j22 * wMxijyV_jjy) + (sigema_i21 * wMxijxV_iix + sigema_j22 * wMxijyV_iiy);
+
+			//-----turbulence-------其实也可以将湍流力放到上面的内力一起去				
+			//const double turb_ij11 = turb11[i] * m_11[i] + turb12[i] * m_21[i] + turb11[jj] * m_11[jj] + turb12[jj] * m_21[jj];
+			//const double turb_ij12 = turb11[i] * m_12[i] + turb12[i] * m_22[i] + turb11[jj] * m_12[jj] + turb12[jj] * m_22[jj];
+			//const double turb_ij21 = turb21[i] * m_11[i] + turb22[i] * m_21[i] + turb21[jj] * m_11[jj] + turb22[jj] * m_21[jj];
+			//const double turb_ij22 = turb21[i] * m_12[i] + turb22[i] * m_22[i] + turb21[jj] * m_12[jj] + turb22[jj] * m_22[jj];
+
+			//const double t1 = (turb_ij11 * dx + turb_ij12 * dy) * bweight[i][j];
+			//const double t2 = (turb_ij21 * dx + turb_ij22 * dy) * bweight[i][j];
+
+			//turbx += t1 * massj / rho_j;
+			//turby += t2 * massj / rho_j;//����over
+			turbxx += (turb11[jj] - turb11[i]) * wMxijxV_iix;
+			turbyy += (turb22[jj] - turb22[i]) * wMxijyV_iiy;
+			turbxy += (turb12[jj] - turb12[i]) * wMxijyV_iiy;
+			turbyx += (turb21[jj] - turb21[i]) * wMxijxV_iix;
+			//--------artificial viscosity-------
+			const double dvx = vx[jj] - vx[i];    //(Vj-Vi)
+			const double dvy = vy[jj] - vy[i];
+			double muv = 0;
+			double piv = 0;
+			const double cj = C[jj];
+			const double vr = dvx * dx + dvy * dy;     //(Vj-Vi)(Rj-Ri)
+			const double mc = 0.5 * (cj + C[i]);
+			const double mrho = 0.5 * (rho_j + rho[i]);
+
+			if (vr < 0) {
+				muv = mhsml * vr / (r2 + mhsml * mhsml * 0.01);//FAI_ij < 0
+				//piv = (0.5 * muv - 0.5 * mc) * muv / mrho;//beta项-alpha项
+				piv = (0.5 * muv - 1.0 * mc) * muv / mrho;//piv > 0
+				//piv = (0.5 * muv) * muv / mrho;//只有beta项，加速度会一直很大，停不下来，穿透。
+			}
+			//人工黏性项，好像过大
+			avx += -massj * piv * wMxijx[i][j];
+			avy += -massj * piv * wMxijy[i][j];
+		}
+
+		fintx[i] = temp_sigemax / rho_i;//不对
+		finty[i] = temp_sigemay / rho_i;
+		turbx[i] = turbxx + turbxy;
+		turby[i] = turbyy + turbyx;
+		Avx[i] = avx;
+		Avy[i] = avy;
+		///if (iotype[i] == InoutType::Fluid|| iotype[i] == InoutType::Outlet) 
+		if (ftype[i] != sph::FixType::Fixed)//inlet粒子的加速度场为0，只有初始速度。outlet粒子呢？
+		{
+			//ax[i] = fintx + avx + turbx;
+			//ay[i] = finty + avy + turby;
+			ax[i] = fintx[i] + avx;
+			ay[i] = finty[i] + avy;
+			//ay[i] = 0;
+			//ax[i] = fintx + avx + turbx + replx;
+			//ay[i] = finty + avy + turby + reply + gravity;				
+		}
+
+	}
+
+}
+
 void single_temp_eos_dev0(unsigned int particleNum, sph::BoundaryType* btype, double* C0, double* Rho0, double* rho, double* Gamma, double* back_p, double* press) {
 	single_temp_eos_dev1<<<32,512>>>(particleNum, btype, C0, Rho0, rho, Gamma, back_p, press);
 	CHECK(cudaDeviceSynchronize());
@@ -1728,5 +2242,40 @@ void single_temp_shapematrix_dev0(unsigned int particleNum, sph::BoundaryType* b
 		, bweight, iotype, lengthofx, mass, m_11, m_12, m_21, m_22, M_11\
 		, M_12, M_13, M_14, M_15, M_21, M_22, M_23, M_24, M_25\
 		, M_31, M_32, M_33, M_34, M_35, M_51, M_52, M_53, M_54, M_55);
+	CHECK(cudaDeviceSynchronize());
+}
+
+void single_temp_bdvisco_dev0(unsigned int particleNum, sph::BoundaryType* btype, double* rho, double* Hsml, double* x, double* y, unsigned int* neibNum, unsigned int** neiblist\
+	, double** bweight, sph::InoutType* iotype, double lengthofx, double** wMxijx, double** wMxijy, double* m_11, double* m_12, double* m_21, double* m_22\
+	, double* press, double* vx, double* vy, double* mass, double* Tau11, double* Tau12, double* Tau21, double* Tau22, sph::FluidType* fltype, double dp\
+	, double C_s, double* turb11, double* turb12, double* turb21, double* turb22) {
+	single_temp_bdvisco_dev1 << <32, 512 >> > (particleNum, btype, rho, Hsml, x, y, neibNum, neiblist\
+		, bweight, iotype, lengthofx, wMxijx, wMxijy, m_11, m_12, m_21, m_22\
+		, press, vx, vy, mass, Tau11, Tau12, Tau21, Tau22, fltype, dp\
+		, C_s, turb11, turb12, turb21, turb22);
+	CHECK(cudaDeviceSynchronize());
+}
+
+void single_step_fluid_dev0(unsigned int particleNum, sph::BoundaryType* btype, double* rho, double* Hsml, double* x, double* y, unsigned int* neibNum, unsigned int** neiblist\
+	, double** bweight, sph::InoutType* iotype, double lengthofx, double** wMxijx, double** wMxijy, double* m_11, double* m_12, double* m_21, double* m_22\
+	, double* press, double* vx, double* vy, double* mass, double* tau11, double* tau12, double* tau21, double* tau22, sph::FluidType* fltype, double dp\
+	, double C_s, double* turb11, double* turb12, double* turb21, double* turb22, double* temperature, double* M_31, double* M_32, double* M_33, double* M_34, double* M_35\
+	, double* M_51, double* M_52, double* M_53, double* M_54, double* M_55, double* divvel, double* vort, sph::FixType* ftype, double* drho, double* temperature_x, double* temperature_t) {
+	single_step_fluid_dev1<<<32,512>>>(particleNum, btype, rho, Hsml, x, y, neibNum, neiblist\
+		, bweight, iotype, lengthofx, wMxijx, wMxijy, m_11, m_12, m_21, m_22\
+		, press, vx, vy, mass, tau11, tau12, tau21, tau22, fltype, dp\
+		, C_s, turb11, turb12, turb21, turb22, temperature, M_31, M_32, M_33, M_34, M_35\
+		, M_51, M_52, M_53, M_54, M_55, divvel, vort, ftype, drho, temperature_x, temperature_t);
+	CHECK(cudaDeviceSynchronize());
+}
+
+void single_step_fluid_eom_dev0(unsigned int particleNum, sph::BoundaryType* btype, double* rho, double* Hsml, double* x, double* y, double* C0, double* C\
+	, unsigned int* neibNum, unsigned int** neiblist, double** bweight, sph::InoutType* iotype, double lengthofx, double** wMxijx, double** wMxijy, double* ax, double* ay\
+	, double* m_11, double* m_12, double* m_21, double* m_22, double* press, double* vx, double* vy, double* mass, double* tau11, double* tau12, double* tau21, double* tau22\
+	, double* turb11, double* turb12, double* turb21, double* turb22, double* fintx, double* finty, sph::FixType* ftype, double* Avx, double* Avy, double* turbx, double* turby) {
+	single_step_fluid_eom_dev1 << <32, 512 >> > (particleNum, btype, rho, Hsml, x, y, C0, C\
+		, neibNum, neiblist, bweight, iotype, lengthofx, wMxijx, wMxijy, ax, ay\
+		, m_11, m_12, m_21, m_22, press, vx, vy, mass, tau11, tau12, tau21, tau22\
+		, turb11, turb12, turb21, turb22, fintx, finty, ftype, Avx, Avy, turbx, turby);
 	CHECK(cudaDeviceSynchronize());
 }
