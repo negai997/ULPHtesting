@@ -1792,10 +1792,10 @@ namespace sph {
 										, particlesa.x, particlesa.y, particlesa.vx, particlesa.vy, particlesa.rho, particlesa.temperature);
 
 		//-------------predictor------------
-		this->single_step();
+		//this->single_step();
 		//this->single_step0();
 		//this->single_step_temperature();
-		//this->single_step_temperature_gaojie();
+		this->single_step_temperature_gaojie();
 		vmax = 0;
 
 		double* d_vmax;
@@ -1811,10 +1811,10 @@ namespace sph {
 		cudaFree(d_vmax);
 
 		//-----------corrector--------------
-		this->single_step();
+		//this->single_step();
 		//this->single_step0();
 		//this->single_step_temperature();
-		//this->single_step_temperature_gaojie();//已经运动了半步了		
+		this->single_step_temperature_gaojie();//已经运动了半步了		
 
 		run_half3Nshiftc_dev0(particleNum(), particlesa.ftype, particlesa.rho, particlesa.half_rho, particlesa.drho, dt, particlesa.vx, particlesa.half_vx, particlesa.ax\
 			, particlesa.vy, particlesa.half_vy, particlesa.ay, particlesa.vol, particlesa.mass, particlesa.x, particlesa.half_x, particlesa.half_y, particlesa.y, particlesa.ux, particlesa.uy\
@@ -1917,6 +1917,8 @@ namespace sph {
 		const std::clock_t end = std::clock();
 		if (time_measure) std::cout << "single step costs " << double(end - begin) / TICKS_PER_SEC << "s\n";
 	}//end single_step
+
+
 
 	//仅用于求温度变化率(一阶)不对，放弃
 	inline void domain::single_step_temperature()

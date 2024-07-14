@@ -383,7 +383,7 @@ __global__ void buildNeighb_dev3(unsigned int particleNum, double* X, double* Y,
 			}
 		}
 		//当out粒子转到inlet粒子，转过来的inlet粒子搜不到旧的inlet粒子了
-		//当进出口使用周期边界时，加上下面这段:
+		//当进出口使用周期边界时，加上下面这段://并行将inlet与outlet分为了两端程序。
 		if (xgcell[i - 1] < 3)//当粒子数较小时，背景网格x=1的网格中有时候只有一竖条粒子，明显不足。需要把x=2的背景网格也拉进来寻找
 		{
 			//std::cerr << std::endl << "find xmimcell: " << xgcell[i - 1] << std::endl;
@@ -411,6 +411,8 @@ __global__ void buildNeighb_dev3(unsigned int particleNum, double* X, double* Y,
 								//particlesa.add2Neiblist(i - 1, j - 1);
 								neiblist[i - 1][neibNum[i - 1]] = j - 1;
 								neibNum[i - 1]++;
+								//neiblist[j - 1][neibNum[j - 1]] = i - 1;
+								//neibNum[j - 1]++;
 								//particlesa.add2Neiblist(i - 1, j - 1);
 								//particlesa.add2Neiblist(j - 1, i - 1);
 								//std::cerr << std::endl << "find onutlet of inlet: " << j << std::endl;
@@ -422,6 +424,46 @@ __global__ void buildNeighb_dev3(unsigned int particleNum, double* X, double* Y,
 			}
 		}
 		//printf("particle_1's neighberNum is %d\n", neibNum[0]);
+		if ((xgcell[i - 1] >= ngridx - 1)|| (xgcell[i - 1] <= ngridx))//当粒子数较小时，背景网格x=1的网格中有时候只有一竖条粒子，明显不足。需要把x=2的背景网格也拉进来寻找
+		{
+			//std::cerr << std::endl << "find xmimcell: " << xgcell[i - 1] << std::endl;
+			//std::cerr << std::endl << "粒子i = " << i << std::endl;				
+			for (auto ycell = minycell; ycell <= maxycell; ycell++)
+			{
+				for (auto xcell = 1; xcell < 3; xcell++) //最左边的两层网格 ngridx 与 ngridx-1
+				{
+					int j = static_cast<int>(grid_d[(xcell - 1) * ngridy + ycell - 1]);
+					for (j; j > 0; j = celldata[j - 1])
+					{
+						//除了一般的r，还有周期边界的r2
+						if (iotype[i - 1] == sph::InoutType::Outlet)
+						{
+							const double xi = X[i - 1];
+							const double yi = Y[i - 1];
+							const double xj = X[j - 1];
+							const double yj = Y[j - 1];
+							const double dy = yi - yj;
+							const double dx2 = xi - lengthofx - xj;
+							const double r2 = sqrt(dx2 * dx2 + dy * dy);
+							const double mhsml = Hsml[i - 1];
+							const double horizon = 3.3 * mhsml;//
+							if (r2 < horizon) {
+								//particlesa.add2Neiblist(i - 1, j - 1);
+								neiblist[i - 1][neibNum[i - 1]] = j - 1;
+								neibNum[i - 1]++;
+								//neiblist[j - 1][neibNum[j - 1]] = i - 1;
+								//neibNum[j - 1]++;
+								//particlesa.add2Neiblist(i - 1, j - 1);
+								//particlesa.add2Neiblist(j - 1, i - 1);
+								//std::cerr << std::endl << "find onutlet of inlet: " << j << std::endl;
+							}
+						}
+						//std::cerr << std::endl << "j: " << j << std::endl;						
+					}
+				}
+			}
+		}
+
 	}
 	//printf("particle_1's neighberNum is %d\n", neibNum[0]);
 }
@@ -1317,7 +1359,7 @@ void buildNeighb_dev02(unsigned int particleNum, double* X, double* Y, unsigned 
 	cudaMallocManaged(&lock,sizeof(int));
 	*lock = 0;
 	buildNeighb_dev2 << <32, 512 >> > ( particleNum, X, Y, neiblist, neibNum, ngridx, ngridy, dxrange, dyrange, x_min, y_min, xgcell, ygcell, celldata, grid_d, lock);
-	//CHECK(cudaDeviceSynchronize());
+	CHECK(cudaDeviceSynchronize());
 	buildNeighb_dev3 << <32, 512 >> > (particleNum, X, Y, neiblist, neibNum, Hsml, ngridx, ngridy, dxrange, dyrange, idx, iotype, xgcell, ygcell, celldata, grid_d, lengthofx);
 	CHECK(cudaDeviceSynchronize());
 	//printf("particle_1's neighberNum is %d\n", neibNum[0]);
@@ -1930,9 +1972,7 @@ __global__ void single_step_fluid_dev1(unsigned int particleNum, sph::BoundaryTy
 			wMxijy[i][j] = (m_21[i] * dx + m_22[i] * dy) * bweight[i][j];
 		}
 
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided) reduction(+:vcc_temperature_t,epsilon_2_11,epsilon_2_12,epsilon_dot21,epsilon_2_22)
-#endif
+
 		for (int j = 0; j < neibNum[i]; j++)
 		{
 			const int jj = neiblist[i][j];
@@ -1974,6 +2014,9 @@ __global__ void single_step_fluid_dev1(unsigned int particleNum, sph::BoundaryTy
 			const double vcc_temperature_yy = M_51[i] * dx + M_52[i] * dy + M_53[i] * dx * dx + M_54[i] * dx * dy + M_55[i] * dy * dy;
 
 			vcc_temperature_t += 2.0 * (vcc_temperature_xx + vcc_temperature_yy) * tij * bweight[i][j] * kij * mass[jj] / rho_j;//温度的拉普拉斯运算，传热方程已经结束！
+			//if (i == 38) {
+			//	printf("xx[38]=%e, yy[38]=%e, tempt[38]=%e\n", vcc_temperature_xx, vcc_temperature_yy, vcc_temperature_t);
+			//}
 			//----------柯西应力--------   
 			double epsilon_dot11 = 0;
 			double epsilon_dot12 = 0;
@@ -1997,6 +2040,7 @@ __global__ void single_step_fluid_dev1(unsigned int particleNum, sph::BoundaryTy
 		}	//end circle j
 		//---速度散度			
 		divvel[i] = epsilon_2_11 + epsilon_2_22;//弱可压缩，散度应该不会很大
+
 		//-------------------------------------黏性力----是一个2*2的张量  
 		/*taoxx = epsilon_2_11 - 1. / 3. * divvel[i];
 		taoyy = epsilon_2_22 - 1. / 3. * divvel[i];
