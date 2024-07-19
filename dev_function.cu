@@ -275,10 +275,10 @@ __global__ void buildNeighb_dev2(unsigned int particleNum, double* X, double* Y,
 			printf("Nan_as%lf\n", X[i - 1]);
 		}
 
-		for (int j = 0; j < MAX_NEIB; j++) {
-			neiblist[i - 1][j] = 0;
-		}
-		neibNum[i - 1] = 0;
+		//for (int j = 0; j < MAX_NEIB; j++) {
+		//	neiblist[i - 1][j] = 0;
+		//}
+		//neibNum[i - 1] = 0;
 
 
 
@@ -601,6 +601,180 @@ __global__ void singlestep_updateWeight_dev1(unsigned int particleNum, unsigned 
 			bweight[i][j] /= sum;
 		}
 	}
+}
+//网格化
+__global__ void singlestep_updateWeight_dev1_grid(unsigned int particleNum, double* hsml, double* x, double* y\
+	, sph::InoutType* iotype, double lengthofx, double** bweight, double** dbweightx, double** dbweighty, int* grid_d\
+	, int* xgcell, int* ygcell, int* celldata, int ngridx, int ngridy, double dxrange, double dyrange) {
+	for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < particleNum; i += gridDim.x * blockDim.x)
+	{
+		int neibNum = 0;
+		double sum = 0;
+		//网格所需变量
+		const int minxcell = (xgcell[i] - int(static_cast<double>(ngridx) * 3 * hsml[i] / dxrange) - 1) > 1 ? (xgcell[i] - int(static_cast<double>(ngridx) * 3 * hsml[i] / dxrange) - 1) : 1;
+		const int maxxcell = (xgcell[i] + int(static_cast<double>(ngridx) * 3 * hsml[i] / dxrange) + 1) < ngridx ? (xgcell[i] + int(static_cast<double>(ngridx) * 3 * hsml[i] / dxrange) + 1) : ngridx;
+		const int minycell = (ygcell[i] - int(static_cast<double>(ngridy) * 3 * hsml[i] / dyrange) - 1) > 1 ? (ygcell[i] - int(static_cast<double>(ngridy) * 3 * hsml[i] / dyrange) - 1) : 1;
+		const int maxycell = (ygcell[i] + int(static_cast<double>(ngridy) * 3 * hsml[i] / dyrange) + 1) < ngridy ? (ygcell[i] + int(static_cast<double>(ngridy) * 3 * hsml[i] / dyrange) + 1) : ngridy;
+
+		for (auto ycell = minycell; ycell <= maxycell; ycell++)
+		{
+			for (auto xcell = minxcell; xcell <= maxxcell; xcell++)
+			{
+				int j = static_cast<int>(grid_d[(xcell - 1) * ngridy + ycell - 1]) - 1;//网格编号
+				for (j; j > -1; j = celldata[j] - 1)//防止重复比较（并行后取消）
+				{
+					if (i == j)
+						continue;
+
+					double dx = x[i] - x[j];//xi(1)
+					//if (iotype[i] == sph::InoutType::Inlet && iotype[j] == sph::InoutType::Outlet)
+					//{
+					//	dx = x[i] + lengthofx - x[j];//xi(1)
+					//}
+					//if (iotype[i] == sph::InoutType::Outlet && iotype[j] == sph::InoutType::Inlet)
+					//{
+					//	dx = x[i] - lengthofx - x[j];//xi(1)
+					//}
+					// 周期边界移至后方
+					//const double dx = particlesa.x[i]-particlesa.x[jj];//xi(1)
+					const double dy = y[i] - y[j];//xi(2)
+					const double r = sqrt(dx * dx + dy * dy);
+					if (r < 3.3 * hsml[i]) {			//运行内容
+
+						//const double q = r / hsml;   //q�Ĵ�����ͬ�������һ��mhsml(662-664)
+						const double mhsml = (hsml[i] + hsml[j]) * 0.5;
+						const double q = r / mhsml;
+						if (q > 3.0) {
+							bweight[i][neibNum] = 0;
+							dbweightx[i][neibNum] = 0;
+							dbweighty[i][neibNum] = 0;
+							neibNum++;
+							continue;
+						}
+
+						const double fac = 1.0 / (3.14159265358979323846 * mhsml * mhsml) / (1.0 - 10.0 * expf(-9));
+						const double dev_bweight = fac * (expf(-q * q) - expf(-9));
+
+						sum += dev_bweight;
+						bweight[i][neibNum] = dev_bweight;
+						const double factor = fac * expf(-q * q) * (-2.0 / mhsml / mhsml);
+
+						dbweightx[i][neibNum] = factor * dx;
+						dbweighty[i][neibNum] = factor * dy;
+
+						neibNum++;
+
+					}
+				}
+			}
+		}
+
+		if (xgcell[i] < 3)//当粒子数较小时，背景网格x=1的网格中有时候只有一竖条粒子，明显不足。需要把x=2的背景网格也拉进来寻找
+		{
+			//std::cerr << std::endl << "find xmimcell: " << xgcell[i - 1] << std::endl;
+			//std::cerr << std::endl << "粒子i = " << i << std::endl;				
+			for (auto ycell = minycell; ycell <= maxycell; ycell++)
+			{
+				for (auto xcell = ngridx - 1; xcell <= ngridx; xcell++) //最右边的两层网格 ngridx 与 ngridx-1
+				{
+					int j = static_cast<int>(grid_d[(xcell - 1) * ngridy + ycell - 1])-1;
+					for (j; j > -1; j = celldata[j]-1)
+					{
+						//除了一般的r，还有周期边界的r2
+						if (iotype[i ] == sph::InoutType::Inlet)
+						{
+
+							const double dy = y[i] - y[j];
+							const double dx = x[i] + lengthofx - x[j];
+							const double r = sqrt(dx * dx + dy * dy);
+							if (r < 3.3 * hsml[i]) {			//运行内容
+								
+								//const double q = r / hsml;   //q�Ĵ�����ͬ�������һ��mhsml(662-664)
+								const double mhsml = (hsml[i] + hsml[j]) * 0.5;
+								const double q = r / mhsml;
+								if (q > 3.0) {
+									bweight[i][neibNum] = 0;
+									dbweightx[i][neibNum] = 0;
+									dbweighty[i][neibNum] = 0;
+									neibNum++;
+									continue;
+								}
+
+								const double fac = 1.0 / (3.14159265358979323846 * mhsml * mhsml) / (1.0 - 10.0 * expf(-9));
+								const double dev_bweight = fac * (expf(-q * q) - expf(-9));
+
+								sum += dev_bweight;
+								bweight[i][neibNum] = dev_bweight;
+								const double factor = fac * expf(-q * q) * (-2.0 / mhsml / mhsml);
+
+								dbweightx[i][neibNum] = factor * dx;
+								dbweighty[i][neibNum] = factor * dy;
+
+								neibNum++;
+
+							}
+						}
+						//std::cerr << std::endl << "j: " << j << std::endl;						
+					}
+				}
+			}
+		}
+		//printf("particle_1's neighberNum is %d\n", neibNum[0]);
+		if ((xgcell[i] >= ngridx - 1) || (xgcell[i] <= ngridx))//当粒子数较小时，背景网格x=1的网格中有时候只有一竖条粒子，明显不足。需要把x=2的背景网格也拉进来寻找
+		{
+			//std::cerr << std::endl << "find xmimcell: " << xgcell[i - 1] << std::endl;
+			//std::cerr << std::endl << "粒子i = " << i << std::endl;				
+			for (auto ycell = minycell; ycell <= maxycell; ycell++)
+			{
+				for (auto xcell = 1; xcell < 3; xcell++) //最左边的两层网格 ngridx 与 ngridx-1
+				{
+					int j = static_cast<int>(grid_d[(xcell - 1) * ngridy + ycell - 1])-1;
+					for (j; j > -1; j = celldata[j]-1)
+					{
+						//除了一般的r，还有周期边界的r2
+						if (iotype[i] == sph::InoutType::Outlet)
+						{
+							const double dy = y[i] - y[j];
+							const double dx = x[i] - lengthofx - x[j];
+							const double r = sqrt(dx * dx + dy * dy);
+							if (r < 3.3 * hsml[i]) {			//运行内容
+
+								//const double q = r / hsml;   //q�Ĵ�����ͬ�������һ��mhsml(662-664)
+								const double mhsml = (hsml[i] + hsml[j]) * 0.5;
+								const double q = r / mhsml;
+								if (q > 3.0) {
+									bweight[i][neibNum] = 0;
+									dbweightx[i][neibNum] = 0;
+									dbweighty[i][neibNum] = 0;
+									neibNum++;
+									continue;
+								}
+
+								const double fac = 1.0 / (3.14159265358979323846 * mhsml * mhsml) / (1.0 - 10.0 * expf(-9));
+								const double dev_bweight = fac * (expf(-q * q) - expf(-9));
+
+								sum += dev_bweight;
+								bweight[i][neibNum] = dev_bweight;
+								const double factor = fac * expf(-q * q) * (-2.0 / mhsml / mhsml);
+
+								dbweightx[i][neibNum] = factor * dx;
+								dbweighty[i][neibNum] = factor * dy;
+								neibNum++;
+
+							}
+						}
+					}
+				}
+			}
+		}
+
+		for (int j = 0; j < neibNum; j++)
+		{
+			bweight[i][j] /= sum;
+		}
+		//printf("neibnum[%d] is %d\n",i, neibNum);
+	}
+
 }
 
 __global__ void singlestep_boundryPNV_dev1(unsigned int particleNum, sph::BoundaryType* btype, unsigned int* neibNum, unsigned int** neiblist, sph::FixType* ftype, double* mass\
@@ -1359,8 +1533,8 @@ void buildNeighb_dev02(unsigned int particleNum, double* X, double* Y, unsigned 
 	cudaMallocManaged(&lock,sizeof(int));
 	*lock = 0;
 	buildNeighb_dev2 << <32, 512 >> > ( particleNum, X, Y, neiblist, neibNum, ngridx, ngridy, dxrange, dyrange, x_min, y_min, xgcell, ygcell, celldata, grid_d, lock);
-	CHECK(cudaDeviceSynchronize());
-	buildNeighb_dev3 << <32, 512 >> > (particleNum, X, Y, neiblist, neibNum, Hsml, ngridx, ngridy, dxrange, dyrange, idx, iotype, xgcell, ygcell, celldata, grid_d, lengthofx);
+	//CHECK(cudaDeviceSynchronize());
+	//buildNeighb_dev3 << <32, 512 >> > (particleNum, X, Y, neiblist, neibNum, Hsml, ngridx, ngridy, dxrange, dyrange, idx, iotype, xgcell, ygcell, celldata, grid_d, lengthofx);
 	CHECK(cudaDeviceSynchronize());
 	//printf("particle_1's neighberNum is %d\n", neibNum[0]);
 	cudaFree(lock);
@@ -1393,9 +1567,13 @@ void singlestep_rhoeos_dev0(unsigned int particleNum, sph::BoundaryType* btype, 
 }
 
 void singlestep_updateWeight_dev0(unsigned int particleNum, unsigned int* neibNum, double* hsml, unsigned int** neiblist, double* x, double* y\
-									, sph::InoutType* iotype, double lengthofx, double** bweight, double** dbweightx, double** dbweighty) {
+									, sph::InoutType* iotype, double lengthofx, double** bweight, double** dbweightx, double** dbweighty\
+									, int* grid_d, int* xgcell, int* ygcell, int* celldata, int ngridx, int ngridy, double dxrange, double dyrange) {
 
-	singlestep_updateWeight_dev1<<<32,512>>>(particleNum, neibNum, hsml, neiblist, x, y, iotype, lengthofx, bweight, dbweightx, dbweighty);
+	//singlestep_updateWeight_dev1<<<32,512>>>(particleNum, neibNum, hsml, neiblist, x, y, iotype, lengthofx, bweight, dbweightx, dbweighty);
+	singlestep_updateWeight_dev1_grid << <32, 256 >> > (particleNum, hsml, x, y\
+		, iotype, lengthofx, bweight, dbweightx, dbweighty, grid_d\
+		, xgcell, ygcell, celldata, ngridx, ngridy, dxrange, dyrange);
 	CHECK(cudaDeviceSynchronize());
 }
 
@@ -1600,6 +1778,160 @@ __global__ void single_temp_boundary_dev1(unsigned int particleNum, sph::Boundar
 
 }
 
+__global__ void single_temp_boundary_dev1_grid(unsigned int particleNum, sph::BoundaryType* btype, unsigned int* neibNum, unsigned int** neiblist, sph::FixType* ftype, double* mass, double* rho\
+	, double* press, double** bweight, double* vx, double* vy, double* Vcc, int* xgcell, int* ygcell, int* grid_d, int* celldata\
+	, int ngridx, int ngridy, double dxrange, double dyrange, double* hsml, double* x, double* y, sph::InoutType* iotype, double lengthofx) {
+	for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < particleNum; i += gridDim.x * blockDim.x)
+	{
+		if (btype[i] != sph::BoundaryType::Boundary) continue;
+		//if (particlesa.iotype[i] == sph::InoutType::Buffer) continue;			
+		double p = 0, vcc = 0;
+		double v_x = 0, v_y = 0;
+
+		int neibNum = 0;
+
+		//网格所需变量
+		const int minxcell = (xgcell[i] - int(static_cast<double>(ngridx) * 3 * hsml[i] / dxrange) - 1) > 1 ? (xgcell[i] - int(static_cast<double>(ngridx) * 3 * hsml[i] / dxrange) - 1) : 1;
+		const int maxxcell = (xgcell[i] + int(static_cast<double>(ngridx) * 3 * hsml[i] / dxrange) + 1) < ngridx ? (xgcell[i] + int(static_cast<double>(ngridx) * 3 * hsml[i] / dxrange) + 1) : ngridx;
+		const int minycell = (ygcell[i] - int(static_cast<double>(ngridy) * 3 * hsml[i] / dyrange) - 1) > 1 ? (ygcell[i] - int(static_cast<double>(ngridy) * 3 * hsml[i] / dyrange) - 1) : 1;
+		const int maxycell = (ygcell[i] + int(static_cast<double>(ngridy) * 3 * hsml[i] / dyrange) + 1) < ngridy ? (ygcell[i] + int(static_cast<double>(ngridy) * 3 * hsml[i] / dyrange) + 1) : ngridy;
+
+		for (auto ycell = minycell; ycell <= maxycell; ycell++)
+		{
+			for (auto xcell = minxcell; xcell <= maxxcell; xcell++)
+			{
+				int j = static_cast<int>(grid_d[(xcell - 1) * ngridy + ycell - 1]) - 1;//网格编号
+				for (j; j > -1; j = celldata[j] - 1)//防止重复比较（并行后取消）
+				{
+					if (i == j)
+						continue;
+
+					double dx = x[i] - x[j];//xi(1)
+
+					const double dy = y[i] - y[j];//xi(2)
+					const double r = sqrt(dx * dx + dy * dy);
+					if (r < 3.3 * hsml[i]) {			//运行内容
+
+						//if (btype[i] == btype[jj]) continue;//Buffer粒子也在这里，导致流出边界固壁的压力不正常
+						if (ftype[j] == sph::FixType::Fixed) {
+							neibNum++;
+							continue;
+						}//其他固壁粒子不参与，ghost不参与，buffer参与
+						const double mass_j = mass[j];
+						const double rho_j = rho[j];
+						const double p_k = press[j];
+						p += p_k * bweight[i][neibNum];//
+						vcc += bweight[i][neibNum];
+						v_x += vx[j] * bweight[i][neibNum];//需要将速度沿法线分解，还没分
+						v_y += vy[j] * bweight[i][neibNum];
+
+						neibNum++;
+
+					}
+				}
+			}
+		}
+
+		if (xgcell[i] < 3)//当粒子数较小时，背景网格x=1的网格中有时候只有一竖条粒子，明显不足。需要把x=2的背景网格也拉进来寻找
+		{
+			//std::cerr << std::endl << "find xmimcell: " << xgcell[i - 1] << std::endl;
+			//std::cerr << std::endl << "粒子i = " << i << std::endl;				
+			for (auto ycell = minycell; ycell <= maxycell; ycell++)
+			{
+				for (auto xcell = ngridx - 1; xcell <= ngridx; xcell++) //最右边的两层网格 ngridx 与 ngridx-1
+				{
+					int j = static_cast<int>(grid_d[(xcell - 1) * ngridy + ycell - 1]) - 1;
+					for (j; j > -1; j = celldata[j] - 1)
+					{
+						//除了一般的r，还有周期边界的r2
+						if (iotype[i] == sph::InoutType::Inlet)
+						{
+
+							const double dy = y[i] - y[j];
+							const double dx = x[i] + lengthofx - x[j];
+							const double r = sqrt(dx * dx + dy * dy);
+							if (r < 3.3 * hsml[i]) {			//运行内容
+
+								//if (btype[i] == btype[jj]) continue;//Buffer粒子也在这里，导致流出边界固壁的压力不正常
+								if (ftype[j] == sph::FixType::Fixed) {
+									neibNum++;
+									continue;
+								}
+									//其他固壁粒子不参与，ghost不参与，buffer参与
+								const double mass_j = mass[j];
+								const double rho_j = rho[j];
+								const double p_k = press[j];
+								p += p_k * bweight[i][neibNum];//
+								vcc += bweight[i][neibNum];
+								v_x += vx[j] * bweight[i][neibNum];//需要将速度沿法线分解，还没分
+								v_y += vy[j] * bweight[i][neibNum];
+
+								neibNum++;
+
+							}
+						}
+						//std::cerr << std::endl << "j: " << j << std::endl;						
+					}
+				}
+			}
+		}
+		//printf("particle_1's neighberNum is %d\n", neibNum[0]);
+		if ((xgcell[i] >= ngridx - 1) || (xgcell[i] <= ngridx))//当粒子数较小时，背景网格x=1的网格中有时候只有一竖条粒子，明显不足。需要把x=2的背景网格也拉进来寻找
+		{
+			//std::cerr << std::endl << "find xmimcell: " << xgcell[i - 1] << std::endl;
+			//std::cerr << std::endl << "粒子i = " << i << std::endl;				
+			for (auto ycell = minycell; ycell <= maxycell; ycell++)
+			{
+				for (auto xcell = 1; xcell < 3; xcell++) //最左边的两层网格 ngridx 与 ngridx-1
+				{
+					int j = static_cast<int>(grid_d[(xcell - 1) * ngridy + ycell - 1]) - 1;
+					for (j; j > -1; j = celldata[j] - 1)
+					{
+						//除了一般的r，还有周期边界的r2
+						if (iotype[i] == sph::InoutType::Outlet)
+						{
+							const double dy = y[i] - y[j];
+							const double dx = x[i] - lengthofx - x[j];
+							const double r = sqrt(dx * dx + dy * dy);
+							if (r < 3.3 * hsml[i]) {			//运行内容
+
+								//if (btype[i] == btype[jj]) continue;//Buffer粒子也在这里，导致流出边界固壁的压力不正常
+								if (ftype[j] == sph::FixType::Fixed) {
+									neibNum++;
+									continue;
+								}//其他固壁粒子不参与，ghost不参与，buffer参与
+								const double mass_j = mass[j];
+								const double rho_j = rho[j];
+								const double p_k = press[j];
+								p += p_k * bweight[i][neibNum];//
+								vcc += bweight[i][neibNum];
+								v_x += vx[j] * bweight[i][neibNum];//需要将速度沿法线分解，还没分
+								v_y += vy[j] * bweight[i][neibNum];
+
+								neibNum++;
+
+							}
+						}
+					}
+				}
+			}
+		}
+
+		//printf("neibnum[%d] is %d\n",i, neibNum);
+
+		p = vcc > 0.00000001 ? p / vcc : 0;//p有值
+		v_x = vcc > 0.00000001 ? v_x / vcc : 0;//v_x一直为0！待解决
+		v_y = vcc > 0.00000001 ? v_y / vcc : 0;
+		double vx0 = 0;
+		double vy0 = 0;
+		Vcc[i] = vcc;
+		press[i] = p;
+		vx[i] = 2.0 * vx0 - v_x;//无滑移，要改成径向，切向
+		vy[i] = 2.0 * vy0 - v_y;
+	}
+
+}
+
 __global__ void single_temp_shapematrix_dev1(unsigned int particleNum, sph::BoundaryType* btype, double* rho, double* Hsml, double* x, double* y, unsigned int* neibNum, unsigned int** neiblist\
 											, double** bweight, sph::InoutType* iotype, double lengthofx, double* mass, double* m_11, double* m_12, double* m_21, double* m_22, double* M_11\
 											, double* M_12, double* M_13, double* M_14, double* M_15, double* M_21, double* M_22, double* M_23, double* M_24, double* M_25\
@@ -1632,6 +1964,7 @@ __global__ void single_temp_shapematrix_dev1(unsigned int particleNum, sph::Boun
 		double a11 = 0; double a14 = 0;
 		double a22 = 0; double a23 = 0; double a24 = 0;
 		double a34 = 0; double a44 = 0;
+
 
 
 		for (int j = 0; j < neibNum[i]; j++)
@@ -1697,6 +2030,342 @@ __global__ void single_temp_shapematrix_dev1(unsigned int particleNum, sph::Boun
 			a44 += dy * dy * dy * dy * massj / rho_j * bweight[i][j];
 			//M矩阵为12个孤立的变量
 		}
+		matrix[0][0] = a00;
+		matrix[0][1] = a01;
+		matrix[0][2] = a02;
+		matrix[0][3] = a03;
+		matrix[0][4] = a04;
+		matrix[1][0] = matrix[0][1]; matrix[1][1] = a11; matrix[1][2] = matrix[0][3]; matrix[1][3] = matrix[0][4]; matrix[1][4] = a14;
+		matrix[2][0] = matrix[0][2]; matrix[2][1] = matrix[1][2]; matrix[2][2] = a22; matrix[2][3] = a23; matrix[2][4] = a24;
+		matrix[3][0] = matrix[0][3]; matrix[3][1] = matrix[1][3]; matrix[3][2] = matrix[2][3]; matrix[3][3] = matrix[2][4]; matrix[3][4] = a34;
+		matrix[4][0] = matrix[0][4]; matrix[4][1] = matrix[1][4]; matrix[4][2] = matrix[2][4]; matrix[4][3] = matrix[3][4]; matrix[4][4] = a44;
+		//一阶
+		//const double det = k_11 * k_22 - k_12 * k_21;
+		//const double det = matrix[0][0] * matrix[1][1] - matrix[0][1] * matrix[0][1];
+		const double det = a00 * a11 - a01 * a01;
+		/*m_11 = k_22 / det;
+		m_12 = -k_12 / det;
+		m_21 = -k_21 / det;
+		m_22 = k_11 / det;*/
+		m_11t = matrix[1][1] / det;
+		m_12t = -matrix[0][1] / det;
+		m_21t = m_12t;
+		m_22t = matrix[0][0] / det;
+		m_11[i] = m_11t;//k矩阵求逆
+		m_12[i] = m_12t;
+		m_21[i] = m_21t;
+		m_22[i] = m_22t;
+		// 二阶
+		//求逆
+		inverseMatrix_d(matrix, inverse, size);
+		/*std::cout << "Inverse matrix of particle" <<i<< std::endl;
+		displayMatrix(inverse, size);*/
+		M_11[i] = inverse[0][0];
+		M_12[i] = inverse[0][1];
+		M_13[i] = inverse[0][2];
+		M_14[i] = inverse[0][3];
+		M_15[i] = inverse[0][4];
+		M_21[i] = inverse[1][0];
+		M_22[i] = inverse[1][1];
+		M_23[i] = inverse[1][2];
+		M_24[i] = inverse[1][3];
+		M_25[i] = inverse[1][4];
+		M_31[i] = inverse[2][0];//M的二阶逆矩阵的部分元素
+		M_32[i] = inverse[2][1];
+		M_33[i] = inverse[2][2];
+		M_34[i] = inverse[2][3];
+		M_35[i] = inverse[2][4];
+		M_51[i] = inverse[4][0];
+		M_52[i] = inverse[4][1];
+		M_53[i] = inverse[4][2];
+		M_54[i] = inverse[4][3];
+		M_55[i] = inverse[4][4];
+	}//end circle i
+}
+
+__global__ void single_temp_shapematrix_dev1_grid(unsigned int particleNum, sph::BoundaryType* btype, double* rho, double* Hsml, double* x, double* y, unsigned int* neibNum, unsigned int** neiblist\
+	, double** bweight, sph::InoutType* iotype, double lengthofx, double* mass, double* m_11, double* m_12, double* m_21, double* m_22, double* M_11\
+	, double* M_12, double* M_13, double* M_14, double* M_15, double* M_21, double* M_22, double* M_23, double* M_24, double* M_25\
+	, double* M_31, double* M_32, double* M_33, double* M_34, double* M_35, double* M_51, double* M_52, double* M_53, double* M_54, double* M_55\
+	, int* xgcell, int* ygcell, int* grid_d, int* celldata, int ngridx, int ngridy, double dxrange, double dyrange) {
+	for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < particleNum; i += gridDim.x * blockDim.x)
+	{
+		if (btype[i] == sph::BoundaryType::Boundary) continue;//边界粒子没有计算M矩阵
+		const double rho_i = rho[i];
+		const double hsml = Hsml[i];
+		const double xi = x[i];
+		const double yi = y[i];
+		double k_11 = 0;//K
+		double k_12 = 0;
+		double k_21 = 0;
+		double k_22 = 0;
+		double m_11t = 0;
+		double m_12t = 0;
+		double m_21t = 0;
+		double m_22t = 0;
+		double matrix[5][5];//M矩阵
+		double inverse[5][5];//逆矩阵			
+		int size = 5;
+		matrix[0][0] = matrix[0][1] = matrix[0][2] = matrix[0][3] = matrix[0][4] = 0;
+		matrix[1][0] = matrix[1][1] = matrix[1][2] = matrix[1][3] = matrix[1][4] = 0;
+		matrix[2][0] = matrix[2][1] = matrix[2][2] = matrix[2][3] = matrix[2][4] = 0;
+		matrix[3][0] = matrix[3][1] = matrix[3][2] = matrix[3][3] = matrix[3][4] = 0;
+		matrix[4][0] = matrix[4][1] = matrix[4][2] = matrix[4][3] = matrix[4][4] = 0;
+		//将每个元素的值代入矩阵，创建M矩阵
+		double a00 = 0; double a01 = 0; double a02 = 0; double a03 = 0; double a04 = 0;
+		double a11 = 0; double a14 = 0;
+		double a22 = 0; double a23 = 0; double a24 = 0;
+		double a34 = 0; double a44 = 0;
+
+		int neibNum = 0;
+
+		//网格所需变量
+		const int minxcell = (xgcell[i] - int(static_cast<double>(ngridx) * 3 * Hsml[i] / dxrange) - 1) > 1 ? (xgcell[i] - int(static_cast<double>(ngridx) * 3 * Hsml[i] / dxrange) - 1) : 1;
+		const int maxxcell = (xgcell[i] + int(static_cast<double>(ngridx) * 3 * Hsml[i] / dxrange) + 1) < ngridx ? (xgcell[i] + int(static_cast<double>(ngridx) * 3 * Hsml[i] / dxrange) + 1) : ngridx;
+		const int minycell = (ygcell[i] - int(static_cast<double>(ngridy) * 3 * Hsml[i] / dyrange) - 1) > 1 ? (ygcell[i] - int(static_cast<double>(ngridy) * 3 * Hsml[i] / dyrange) - 1) : 1;
+		const int maxycell = (ygcell[i] + int(static_cast<double>(ngridy) * 3 * Hsml[i] / dyrange) + 1) < ngridy ? (ygcell[i] + int(static_cast<double>(ngridy) * 3 * Hsml[i] / dyrange) + 1) : ngridy;
+
+		for (auto ycell = minycell; ycell <= maxycell; ycell++)
+		{
+			for (auto xcell = minxcell; xcell <= maxxcell; xcell++)
+			{
+				int j = static_cast<int>(grid_d[(xcell - 1) * ngridy + ycell - 1]) - 1;//网格编号
+				for (j; j > -1; j = celldata[j] - 1)//防止重复比较（并行后取消）
+				{
+					if (i == j)
+						continue;
+
+					double dx = x[i] - x[j];//xi(1)
+
+					const double dy = y[i] - y[j];//xi(2)
+					const double r = sqrt(dx * dx + dy * dy);
+					if (r < 3.3 * Hsml[i]) {			//运行内容
+
+						if (bweight[i][neibNum] < 0.000000001) {
+							neibNum++;
+							continue;
+						}
+
+						const double rho_j = rho[j];
+						const double massj = mass[j];
+						//一阶
+						//k_11 += dx * dx * massj / rho_j * bweight[i][j];	//k11
+						//k_12 += dx * dy * massj / rho_j * bweight[i][j];//k_12=k_21
+						//k_21 += dy * dx * massj / rho_j * bweight[i][j];
+						//k_22 += dy * dy * massj / rho_j * bweight[i][j];
+						//二阶 matrix[0][0]=k_11
+						/*matrix[0][0] += dx * dx * massj / rho_j * bweight[i][j];
+						matrix[0][1] += dx * dy * massj / rho_j * bweight[i][j];
+						matrix[0][2] += dx * dx * dx * massj / rho_j * bweight[i][j];
+						matrix[0][3] += dx * dx * dy * massj / rho_j * bweight[i][j];
+						matrix[0][4] += dx * dy * dy * massj / rho_j * bweight[i][j];*/
+						a00 += dx * dx * massj / rho_j * bweight[i][neibNum];// = k11
+						a01 += dx * dy * massj / rho_j * bweight[i][neibNum];// = k12 = k_21
+						a02 += dx * dx * dx * massj / rho_j * bweight[i][neibNum];
+						a03 += dx * dx * dy * massj / rho_j * bweight[i][neibNum];
+						a04 += dx * dy * dy * massj / rho_j * bweight[i][neibNum];
+						/*matrix[1][0] = matrix[0][1];
+						matrix[1][1] += dy * dy * massj / rho_j * bweight[i][j];
+						matrix[1][2] = matrix[0][3];
+						matrix[1][3] = matrix[0][4];
+						matrix[1][4] += dy * dy * dy * massj / rho_j * bweight[i][j];*/
+						a11 += dy * dy * massj / rho_j * bweight[i][neibNum];// = k22
+						a14 += dy * dy * dy * massj / rho_j * bweight[i][neibNum];
+						/*matrix[2][0] = matrix[0][2];
+						matrix[2][1] = matrix[1][2];
+						matrix[2][2] += dx * dx * dx * dx * massj / rho_j * bweight[i][j];
+						matrix[2][3] += dx * dx * dx * dy * massj / rho_j * bweight[i][j];
+						matrix[2][4] += dx * dx * dy * dy * massj / rho_j * bweight[i][j];*/
+						a22 += dx * dx * dx * dx * massj / rho_j * bweight[i][neibNum];
+						a23 += dx * dx * dx * dy * massj / rho_j * bweight[i][neibNum];
+						a24 += dx * dx * dy * dy * massj / rho_j * bweight[i][neibNum];
+						/*matrix[3][0] = matrix[0][3];
+						matrix[3][1] = matrix[1][3];
+						matrix[3][2] = matrix[2][3];
+						matrix[3][3] = matrix[2][4];
+						matrix[3][4] += dx * dy * dy * dy * massj / rho_j * bweight[i][j];*/
+						a34 += dx * dy * dy * dy * massj / rho_j * bweight[i][neibNum];
+						/*matrix[4][0] = matrix[0][4];
+						matrix[4][1] = matrix[1][4];
+						matrix[4][2] = matrix[2][4];
+						matrix[4][3] = matrix[3][4];
+						matrix[4][4] += dy * dy * dy * dy * massj / rho_j * bweight[i][j];*/
+						a44 += dy * dy * dy * dy * massj / rho_j * bweight[i][neibNum];
+						//M矩阵为12个孤立的变量
+
+						neibNum++;
+
+					}
+				}
+			}
+		}
+
+		if (xgcell[i] < 3)//当粒子数较小时，背景网格x=1的网格中有时候只有一竖条粒子，明显不足。需要把x=2的背景网格也拉进来寻找
+		{
+			//std::cerr << std::endl << "find xmimcell: " << xgcell[i - 1] << std::endl;
+			//std::cerr << std::endl << "粒子i = " << i << std::endl;				
+			for (auto ycell = minycell; ycell <= maxycell; ycell++)
+			{
+				for (auto xcell = ngridx - 1; xcell <= ngridx; xcell++) //最右边的两层网格 ngridx 与 ngridx-1
+				{
+					int j = static_cast<int>(grid_d[(xcell - 1) * ngridy + ycell - 1]) - 1;
+					for (j; j > -1; j = celldata[j] - 1)
+					{
+						//除了一般的r，还有周期边界的r2
+						if (iotype[i] == sph::InoutType::Inlet)
+						{
+
+							const double dy = y[i] - y[j];
+							const double dx = x[i] + lengthofx - x[j];
+							const double r = sqrt(dx * dx + dy * dy);
+							if (r < 3.3 * Hsml[i]) {			//运行内容
+
+								if (bweight[i][neibNum] < 0.000000001) {
+									neibNum++;
+									continue;
+								}
+
+								const double rho_j = rho[j];
+								const double massj = mass[j];
+								//一阶
+								//k_11 += dx * dx * massj / rho_j * bweight[i][j];	//k11
+								//k_12 += dx * dy * massj / rho_j * bweight[i][j];//k_12=k_21
+								//k_21 += dy * dx * massj / rho_j * bweight[i][j];
+								//k_22 += dy * dy * massj / rho_j * bweight[i][j];
+								//二阶 matrix[0][0]=k_11
+								/*matrix[0][0] += dx * dx * massj / rho_j * bweight[i][j];
+								matrix[0][1] += dx * dy * massj / rho_j * bweight[i][j];
+								matrix[0][2] += dx * dx * dx * massj / rho_j * bweight[i][j];
+								matrix[0][3] += dx * dx * dy * massj / rho_j * bweight[i][j];
+								matrix[0][4] += dx * dy * dy * massj / rho_j * bweight[i][j];*/
+								a00 += dx * dx * massj / rho_j * bweight[i][neibNum];// = k11
+								a01 += dx * dy * massj / rho_j * bweight[i][neibNum];// = k12 = k_21
+								a02 += dx * dx * dx * massj / rho_j * bweight[i][neibNum];
+								a03 += dx * dx * dy * massj / rho_j * bweight[i][neibNum];
+								a04 += dx * dy * dy * massj / rho_j * bweight[i][neibNum];
+								/*matrix[1][0] = matrix[0][1];
+								matrix[1][1] += dy * dy * massj / rho_j * bweight[i][j];
+								matrix[1][2] = matrix[0][3];
+								matrix[1][3] = matrix[0][4];
+								matrix[1][4] += dy * dy * dy * massj / rho_j * bweight[i][j];*/
+								a11 += dy * dy * massj / rho_j * bweight[i][neibNum];// = k22
+								a14 += dy * dy * dy * massj / rho_j * bweight[i][neibNum];
+								/*matrix[2][0] = matrix[0][2];
+								matrix[2][1] = matrix[1][2];
+								matrix[2][2] += dx * dx * dx * dx * massj / rho_j * bweight[i][j];
+								matrix[2][3] += dx * dx * dx * dy * massj / rho_j * bweight[i][j];
+								matrix[2][4] += dx * dx * dy * dy * massj / rho_j * bweight[i][j];*/
+								a22 += dx * dx * dx * dx * massj / rho_j * bweight[i][neibNum];
+								a23 += dx * dx * dx * dy * massj / rho_j * bweight[i][neibNum];
+								a24 += dx * dx * dy * dy * massj / rho_j * bweight[i][neibNum];
+								/*matrix[3][0] = matrix[0][3];
+								matrix[3][1] = matrix[1][3];
+								matrix[3][2] = matrix[2][3];
+								matrix[3][3] = matrix[2][4];
+								matrix[3][4] += dx * dy * dy * dy * massj / rho_j * bweight[i][j];*/
+								a34 += dx * dy * dy * dy * massj / rho_j * bweight[i][neibNum];
+								/*matrix[4][0] = matrix[0][4];
+								matrix[4][1] = matrix[1][4];
+								matrix[4][2] = matrix[2][4];
+								matrix[4][3] = matrix[3][4];
+								matrix[4][4] += dy * dy * dy * dy * massj / rho_j * bweight[i][j];*/
+								a44 += dy * dy * dy * dy * massj / rho_j * bweight[i][neibNum];
+								//M矩阵为12个孤立的变量
+
+								neibNum++;
+
+							}
+						}
+						//std::cerr << std::endl << "j: " << j << std::endl;						
+					}
+				}
+			}
+		}
+		//printf("particle_1's neighberNum is %d\n", neibNum[0]);
+		if ((xgcell[i] >= ngridx - 1) || (xgcell[i] <= ngridx))//当粒子数较小时，背景网格x=1的网格中有时候只有一竖条粒子，明显不足。需要把x=2的背景网格也拉进来寻找
+		{
+			//std::cerr << std::endl << "find xmimcell: " << xgcell[i - 1] << std::endl;
+			//std::cerr << std::endl << "粒子i = " << i << std::endl;				
+			for (auto ycell = minycell; ycell <= maxycell; ycell++)
+			{
+				for (auto xcell = 1; xcell < 3; xcell++) //最左边的两层网格 ngridx 与 ngridx-1
+				{
+					int j = static_cast<int>(grid_d[(xcell - 1) * ngridy + ycell - 1]) - 1;
+					for (j; j > -1; j = celldata[j] - 1)
+					{
+						//除了一般的r，还有周期边界的r2
+						if (iotype[i] == sph::InoutType::Outlet)
+						{
+							const double dy = y[i] - y[j];
+							const double dx = x[i] - lengthofx - x[j];
+							const double r = sqrt(dx * dx + dy * dy);
+							if (r < 3.3 * Hsml[i]) {			//运行内容
+
+								if (bweight[i][neibNum] < 0.000000001) {
+									neibNum++;
+									continue;
+								}
+
+								const double rho_j = rho[j];
+								const double massj = mass[j];
+								//一阶
+								//k_11 += dx * dx * massj / rho_j * bweight[i][j];	//k11
+								//k_12 += dx * dy * massj / rho_j * bweight[i][j];//k_12=k_21
+								//k_21 += dy * dx * massj / rho_j * bweight[i][j];
+								//k_22 += dy * dy * massj / rho_j * bweight[i][j];
+								//二阶 matrix[0][0]=k_11
+								/*matrix[0][0] += dx * dx * massj / rho_j * bweight[i][j];
+								matrix[0][1] += dx * dy * massj / rho_j * bweight[i][j];
+								matrix[0][2] += dx * dx * dx * massj / rho_j * bweight[i][j];
+								matrix[0][3] += dx * dx * dy * massj / rho_j * bweight[i][j];
+								matrix[0][4] += dx * dy * dy * massj / rho_j * bweight[i][j];*/
+								a00 += dx * dx * massj / rho_j * bweight[i][neibNum];// = k11
+								a01 += dx * dy * massj / rho_j * bweight[i][neibNum];// = k12 = k_21
+								a02 += dx * dx * dx * massj / rho_j * bweight[i][neibNum];
+								a03 += dx * dx * dy * massj / rho_j * bweight[i][neibNum];
+								a04 += dx * dy * dy * massj / rho_j * bweight[i][neibNum];
+								/*matrix[1][0] = matrix[0][1];
+								matrix[1][1] += dy * dy * massj / rho_j * bweight[i][j];
+								matrix[1][2] = matrix[0][3];
+								matrix[1][3] = matrix[0][4];
+								matrix[1][4] += dy * dy * dy * massj / rho_j * bweight[i][j];*/
+								a11 += dy * dy * massj / rho_j * bweight[i][neibNum];// = k22
+								a14 += dy * dy * dy * massj / rho_j * bweight[i][neibNum];
+								/*matrix[2][0] = matrix[0][2];
+								matrix[2][1] = matrix[1][2];
+								matrix[2][2] += dx * dx * dx * dx * massj / rho_j * bweight[i][j];
+								matrix[2][3] += dx * dx * dx * dy * massj / rho_j * bweight[i][j];
+								matrix[2][4] += dx * dx * dy * dy * massj / rho_j * bweight[i][j];*/
+								a22 += dx * dx * dx * dx * massj / rho_j * bweight[i][neibNum];
+								a23 += dx * dx * dx * dy * massj / rho_j * bweight[i][neibNum];
+								a24 += dx * dx * dy * dy * massj / rho_j * bweight[i][neibNum];
+								/*matrix[3][0] = matrix[0][3];
+								matrix[3][1] = matrix[1][3];
+								matrix[3][2] = matrix[2][3];
+								matrix[3][3] = matrix[2][4];
+								matrix[3][4] += dx * dy * dy * dy * massj / rho_j * bweight[i][j];*/
+								a34 += dx * dy * dy * dy * massj / rho_j * bweight[i][neibNum];
+								/*matrix[4][0] = matrix[0][4];
+								matrix[4][1] = matrix[1][4];
+								matrix[4][2] = matrix[2][4];
+								matrix[4][3] = matrix[3][4];
+								matrix[4][4] += dy * dy * dy * dy * massj / rho_j * bweight[i][j];*/
+								a44 += dy * dy * dy * dy * massj / rho_j * bweight[i][neibNum];
+								//M矩阵为12个孤立的变量
+
+
+								neibNum++;
+
+							}
+						}
+					}
+				}
+			}
+		}
+
+		//printf("neibnum[%d] is %d\n",i, neibNum);
+
+
 		matrix[0][0] = a00;
 		matrix[0][1] = a01;
 		matrix[0][2] = a02;
@@ -1901,6 +2570,362 @@ __global__ void single_temp_bdvisco_dev1(unsigned int particleNum, sph::Boundary
 	}//end circle i
 }
 
+__global__ void single_temp_bdvisco_dev1_grid(unsigned int particleNum, sph::BoundaryType* btype, double* rho, double* Hsml, double* x, double* y, unsigned int* neibNum, unsigned int** neiblist\
+	, double** bweight, sph::InoutType* iotype, double lengthofx, double** wMxijx, double** wMxijy, double* m_11, double* m_12, double* m_21, double* m_22\
+	, double* press, double* vx, double* vy, double* mass, double* Tau11, double* Tau12, double* Tau21, double* Tau22, sph::FluidType* fltype, double dp\
+	, double C_s, double* turb11, double* turb12, double* turb21, double* turb22\
+	, int* xgcell, int* ygcell, int* grid_d, int* celldata, int ngridx, int ngridy, double dxrange, double dyrange) {
+	for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < particleNum; i += gridDim.x * blockDim.x)
+	{
+		if (btype[i] != sph::BoundaryType::Boundary) continue;//存在一个边界缺失的问题：边界的邻域是不全的，所以算的边界的黏性力其实也不准确
+		const double rho_i = rho[i];
+		const double hsml = Hsml[i];
+		const double xi = x[i];
+		const double yi = y[i];
+
+		int neibNum = 0;
+
+		//网格所需变量
+		const int minxcell = (xgcell[i] - int(static_cast<double>(ngridx) * 3 * Hsml[i] / dxrange) - 1) > 1 ? (xgcell[i] - int(static_cast<double>(ngridx) * 3 * Hsml[i] / dxrange) - 1) : 1;
+		const int maxxcell = (xgcell[i] + int(static_cast<double>(ngridx) * 3 * Hsml[i] / dxrange) + 1) < ngridx ? (xgcell[i] + int(static_cast<double>(ngridx) * 3 * Hsml[i] / dxrange) + 1) : ngridx;
+		const int minycell = (ygcell[i] - int(static_cast<double>(ngridy) * 3 * Hsml[i] / dyrange) - 1) > 1 ? (ygcell[i] - int(static_cast<double>(ngridy) * 3 * Hsml[i] / dyrange) - 1) : 1;
+		const int maxycell = (ygcell[i] + int(static_cast<double>(ngridy) * 3 * Hsml[i] / dyrange) + 1) < ngridy ? (ygcell[i] + int(static_cast<double>(ngridy) * 3 * Hsml[i] / dyrange) + 1) : ngridy;
+
+		for (auto ycell = minycell; ycell <= maxycell; ycell++)
+		{
+			for (auto xcell = minxcell; xcell <= maxxcell; xcell++)
+			{
+				int j = static_cast<int>(grid_d[(xcell - 1) * ngridy + ycell - 1]) - 1;//网格编号
+				for (j; j > -1; j = celldata[j] - 1)//防止重复比较（并行后取消）
+				{
+					if (i == j)
+						continue;
+
+					double dx = x[i] - x[j];//xi(1)
+
+					const double dy = y[i] - y[j];//xi(2)
+					const double r = sqrt(dx * dx + dy * dy);
+					if (r < 3.3 * Hsml[i]) {			//运行内容
+
+						if (bweight[i][neibNum] < 0.000000001) {
+							neibNum++;
+							continue;
+						}
+
+						wMxijx[i][neibNum] = (m_11[i] * dx + m_12[i] * dy) * bweight[i][neibNum]; //m_12[i]可能等于0
+						wMxijy[i][neibNum] = (m_21[i] * dx + m_22[i] * dy) * bweight[i][neibNum];
+
+						neibNum++;
+
+					}
+				}
+			}
+		}
+
+		if (xgcell[i] < 3)//当粒子数较小时，背景网格x=1的网格中有时候只有一竖条粒子，明显不足。需要把x=2的背景网格也拉进来寻找
+		{
+			//std::cerr << std::endl << "find xmimcell: " << xgcell[i - 1] << std::endl;
+			//std::cerr << std::endl << "粒子i = " << i << std::endl;				
+			for (auto ycell = minycell; ycell <= maxycell; ycell++)
+			{
+				for (auto xcell = ngridx - 1; xcell <= ngridx; xcell++) //最右边的两层网格 ngridx 与 ngridx-1
+				{
+					int j = static_cast<int>(grid_d[(xcell - 1) * ngridy + ycell - 1]) - 1;
+					for (j; j > -1; j = celldata[j] - 1)
+					{
+						//除了一般的r，还有周期边界的r2
+						if (iotype[i] == sph::InoutType::Inlet)
+						{
+
+							const double dy = y[i] - y[j];
+							const double dx = x[i] + lengthofx - x[j];
+							const double r = sqrt(dx * dx + dy * dy);
+							if (r < 3.3 * Hsml[i]) {			//运行内容
+
+								if (bweight[i][neibNum] < 0.000000001) {
+									neibNum++;
+									continue;
+								}
+
+								wMxijx[i][neibNum] = (m_11[i] * dx + m_12[i] * dy) * bweight[i][neibNum]; //m_12[i]可能等于0
+								wMxijy[i][neibNum] = (m_21[i] * dx + m_22[i] * dy) * bweight[i][neibNum];
+
+								neibNum++;
+
+							}
+						}
+						//std::cerr << std::endl << "j: " << j << std::endl;						
+					}
+				}
+			}
+		}
+		//printf("particle_1's neighberNum is %d\n", neibNum[0]);
+		if ((xgcell[i] >= ngridx - 1) || (xgcell[i] <= ngridx))//当粒子数较小时，背景网格x=1的网格中有时候只有一竖条粒子，明显不足。需要把x=2的背景网格也拉进来寻找
+		{
+			//std::cerr << std::endl << "find xmimcell: " << xgcell[i - 1] << std::endl;
+			//std::cerr << std::endl << "粒子i = " << i << std::endl;				
+			for (auto ycell = minycell; ycell <= maxycell; ycell++)
+			{
+				for (auto xcell = 1; xcell < 3; xcell++) //最左边的两层网格 ngridx 与 ngridx-1
+				{
+					int j = static_cast<int>(grid_d[(xcell - 1) * ngridy + ycell - 1]) - 1;
+					for (j; j > -1; j = celldata[j] - 1)
+					{
+						//除了一般的r，还有周期边界的r2
+						if (iotype[i] == sph::InoutType::Outlet)
+						{
+							const double dy = y[i] - y[j];
+							const double dx = x[i] - lengthofx - x[j];
+							const double r = sqrt(dx * dx + dy * dy);
+							if (r < 3.3 * Hsml[i]) {			//运行内容
+
+								if (bweight[i][neibNum] < 0.000000001) {
+									neibNum++;
+									continue;
+								}
+
+								wMxijx[i][neibNum] = (m_11[i] * dx + m_12[i] * dy) * bweight[i][neibNum]; //m_12[i]可能等于0
+								wMxijy[i][neibNum] = (m_21[i] * dx + m_22[i] * dy) * bweight[i][neibNum];
+
+								neibNum++;
+
+							}
+						}
+					}
+				}
+			}
+		}
+
+		//printf("neibnum[%d] is %d\n",i, neibNum);
+
+
+
+
+		//--------wMxij-------
+		//if (btype[i] != sph::BoundaryType::Boundary) continue;
+
+		double epsilon_2_11 = 0;
+		double epsilon_2_12 = 0;
+		double epsilon_2_21 = 0;
+		double epsilon_2_22 = 0;     //=dudx11
+		double epsilon_3 = 0;
+		double epsilon_dot11 = 0;
+		double epsilon_dot12 = 0;
+		double epsilon_dot21 = 0;
+		double epsilon_dot22 = 0;
+		double tau11 = 0;
+		double tau12 = 0;
+		double tau21 = 0;
+		double tau22 = 0;
+
+		const double p_i = press[i];
+
+		neibNum = 0;
+
+		for (auto ycell = minycell; ycell <= maxycell; ycell++)
+		{
+			for (auto xcell = minxcell; xcell <= maxxcell; xcell++)
+			{
+				int j = static_cast<int>(grid_d[(xcell - 1) * ngridy + ycell - 1]) - 1;//网格编号
+				for (j; j > -1; j = celldata[j] - 1)//防止重复比较（并行后取消）
+				{
+					if (i == j)
+						continue;
+
+					double dx = x[i] - x[j];//xi(1)
+
+					const double dy = y[i] - y[j];//xi(2)
+					const double r = sqrt(dx * dx + dy * dy);
+					if (r < 3.3 * Hsml[i]) {			//运行内容
+
+						if (btype[j] == sph::BoundaryType::Boundary) {
+							neibNum++;
+							continue;
+						}
+						if (bweight[i][neibNum] < 0.000000001) {
+							neibNum++;
+							continue;
+						}
+						const double rho_j = rho[j];
+						const double rho_ij = rho_j - rho_i;
+						const double diffx = rho_ij * dx / r;
+						const double diffy = rho_ij * dx / r;
+						//const double dvx = vx[jj] - ((ii)->bctype == BoundaryConditionType::NoSlip ? vx[i] : 0);
+						//const double dvy = vy[jj] - ((ii)->bctype == BoundaryConditionType::NoSlip ? vy[i] : 0);
+						const double dvx = vx[j] - vx[i];
+						const double dvy = vy[j] - vy[i];
+						const double massj = mass[j];
+
+						epsilon_2_11 += dvx * wMxijx[i][neibNum] * massj / rho_j;//du/dx
+						epsilon_2_12 += dvx * wMxijy[i][neibNum] * massj / rho_j;//du/dy
+						epsilon_2_21 += dvy * wMxijx[i][neibNum] * massj / rho_j;//dv/dx
+						epsilon_2_22 += dvy * wMxijy[i][neibNum] * massj / rho_j;//dv/dy			
+
+
+						neibNum++;
+
+					}
+				}
+			}
+		}
+
+		if (xgcell[i] < 3)//当粒子数较小时，背景网格x=1的网格中有时候只有一竖条粒子，明显不足。需要把x=2的背景网格也拉进来寻找
+		{
+			//std::cerr << std::endl << "find xmimcell: " << xgcell[i - 1] << std::endl;
+			//std::cerr << std::endl << "粒子i = " << i << std::endl;				
+			for (auto ycell = minycell; ycell <= maxycell; ycell++)
+			{
+				for (auto xcell = ngridx - 1; xcell <= ngridx; xcell++) //最右边的两层网格 ngridx 与 ngridx-1
+				{
+					int j = static_cast<int>(grid_d[(xcell - 1) * ngridy + ycell - 1]) - 1;
+					for (j; j > -1; j = celldata[j] - 1)
+					{
+						//除了一般的r，还有周期边界的r2
+						if (iotype[i] == sph::InoutType::Inlet)
+						{
+
+							const double dy = y[i] - y[j];
+							const double dx = x[i] + lengthofx - x[j];
+							const double r = sqrt(dx * dx + dy * dy);
+							if (r < 3.3 * Hsml[i]) {			//运行内容
+
+								if (btype[j] == sph::BoundaryType::Boundary) {
+									neibNum++;
+									continue;
+								}
+								if (bweight[i][neibNum] < 0.000000001) {
+									neibNum++;
+									continue;
+								}
+								const double rho_j = rho[j];
+								const double rho_ij = rho_j - rho_i;
+								const double diffx = rho_ij * dx / r;
+								const double diffy = rho_ij * dx / r;
+								//const double dvx = vx[jj] - ((ii)->bctype == BoundaryConditionType::NoSlip ? vx[i] : 0);
+								//const double dvy = vy[jj] - ((ii)->bctype == BoundaryConditionType::NoSlip ? vy[i] : 0);
+								const double dvx = vx[j] - vx[i];
+								const double dvy = vy[j] - vy[i];
+								const double massj = mass[j];
+
+								epsilon_2_11 += dvx * wMxijx[i][neibNum] * massj / rho_j;//du/dx
+								epsilon_2_12 += dvx * wMxijy[i][neibNum] * massj / rho_j;//du/dy
+								epsilon_2_21 += dvy * wMxijx[i][neibNum] * massj / rho_j;//dv/dx
+								epsilon_2_22 += dvy * wMxijy[i][neibNum] * massj / rho_j;//dv/dy			
+
+
+								neibNum++;
+
+							}
+						}
+						//std::cerr << std::endl << "j: " << j << std::endl;						
+					}
+				}
+			}
+		}
+		//printf("particle_1's neighberNum is %d\n", neibNum[0]);
+		if ((xgcell[i] >= ngridx - 1) || (xgcell[i] <= ngridx))//当粒子数较小时，背景网格x=1的网格中有时候只有一竖条粒子，明显不足。需要把x=2的背景网格也拉进来寻找
+		{
+			//std::cerr << std::endl << "find xmimcell: " << xgcell[i - 1] << std::endl;
+			//std::cerr << std::endl << "粒子i = " << i << std::endl;				
+			for (auto ycell = minycell; ycell <= maxycell; ycell++)
+			{
+				for (auto xcell = 1; xcell < 3; xcell++) //最左边的两层网格 ngridx 与 ngridx-1
+				{
+					int j = static_cast<int>(grid_d[(xcell - 1) * ngridy + ycell - 1]) - 1;
+					for (j; j > -1; j = celldata[j] - 1)
+					{
+						//除了一般的r，还有周期边界的r2
+						if (iotype[i] == sph::InoutType::Outlet)
+						{
+							const double dy = y[i] - y[j];
+							const double dx = x[i] - lengthofx - x[j];
+							const double r = sqrt(dx * dx + dy * dy);
+							if (r < 3.3 * Hsml[i]) {			//运行内容
+
+								if (btype[j] == sph::BoundaryType::Boundary) {
+									neibNum++;
+									continue;
+								}
+								if (bweight[i][neibNum] < 0.000000001) {
+									neibNum++;
+									continue;
+								}
+								const double rho_j = rho[j];
+								const double rho_ij = rho_j - rho_i;
+								const double diffx = rho_ij * dx / r;
+								const double diffy = rho_ij * dx / r;
+								//const double dvx = vx[jj] - ((ii)->bctype == BoundaryConditionType::NoSlip ? vx[i] : 0);
+								//const double dvy = vy[jj] - ((ii)->bctype == BoundaryConditionType::NoSlip ? vy[i] : 0);
+								const double dvx = vx[j] - vx[i];
+								const double dvy = vy[j] - vy[i];
+								const double massj = mass[j];
+
+								epsilon_2_11 += dvx * wMxijx[i][neibNum] * massj / rho_j;//du/dx
+								epsilon_2_12 += dvx * wMxijy[i][neibNum] * massj / rho_j;//du/dy
+								epsilon_2_21 += dvy * wMxijx[i][neibNum] * massj / rho_j;//dv/dx
+								epsilon_2_22 += dvy * wMxijy[i][neibNum] * massj / rho_j;//dv/dy			
+
+								neibNum++;
+
+							}
+						}
+					}
+				}
+			}
+		}
+
+
+		 //epsilon_second= -1./3.* epsilon_3;//*��λ����
+
+			//epsilon_temp(11)= epsilon_2(11) * m_11[i] + epsilon_2(12) * m_21[i];
+			//epsilon_temp(12)= epsilon_2(11) * m_12[i] + epsilon_2(12) * m_22[i];
+			//epsilon_temp(21)= epsilon_2(21) * m_11[i] + epsilon_2(22) * m_21[i];
+			//epsilon_temp(22)= epsilon_2(21) * m_12[i] + epsilon_2(22) * m_22[i];
+
+			//epsilon_dot=0.5*(epsilon_temp+transpose(epsilon_temp))+epsilon_second  !�ܵ�epsilon,����������ȣ�û��epsilon_second
+		/*epsilon_dot11 = epsilon_2_11 * m_11[i] + epsilon_2_12 * m_21[i] - 1. / 3. * epsilon_3;
+		epsilon_dot12 = ((epsilon_2_11 * m_12[i] + epsilon_2_12 * m_22[i]) + (epsilon_2_21 * m_11[i] + epsilon_2_22 * m_21[i])) * 0.5;
+		epsilon_dot21 = epsilon_dot12;
+		epsilon_dot22 = epsilon_2_21 * m_12[i] + epsilon_2_22 * m_22[i] - 1. / 3. * epsilon_3;*/
+		epsilon_dot11 = epsilon_2_11;
+		epsilon_dot12 = 0.5 * (epsilon_2_12 + epsilon_2_21);
+		epsilon_dot21 = epsilon_dot12;
+		epsilon_dot22 = epsilon_2_22;
+		//边界粒子的物理黏性项tau： 比较重要！
+		Tau11[i] = 2. * Viscosity(fltype[i]) * epsilon_dot11;//边界粒子的黏性力
+		Tau12[i] = 2. * Viscosity(fltype[i]) * epsilon_dot12;
+		Tau21[i] = 2. * Viscosity(fltype[i]) * epsilon_dot21;
+		Tau22[i] = 2. * Viscosity(fltype[i]) * epsilon_dot22;
+
+		//double dist = 0;
+		//const double y1 = indiameter;//height
+		//const double R = sqrt((xi - 0.2 * y1) * (xi - 0.2 * y1) + yi * yi) - 3 * 0.004;//粒子距圆柱的距离
+		//const double L1 = 0.5 * y1 - abs(yi);
+		////const double L1 = abs(0.5 * y1 - yi);
+		//const double L2 = std::min(xi + 0.08, inlen - xi);
+		////const double L2 = abs(yi - 0.5 * y1);
+		//double temp = std::min(R, L1);//dwall
+		//dist = std::min(temp, L2);
+		//if (dist < 0) {
+		//	dist = 0;
+		//}
+		const double dvdx11 = epsilon_2_11;          // dudx11=epsilon_dot11
+		const double dvdx12 = 0.5 * (epsilon_2_12 + epsilon_2_21);
+		const double dvdx21 = dvdx12;
+		const double dvdx22 = epsilon_2_22;
+		const double s1ij = sqrt(2.0 * (dvdx11 * dvdx11 + dvdx12 * dvdx12 + dvdx21 * dvdx21 + dvdx22 * dvdx22));
+
+		const double mut = dp * dp * C_s * C_s * s1ij;
+		//const double kenergy = C_v / C_e * dp * dp * s1ij * s1ij;    //Ksps=K_turb
+		const double kenergy = (vx[i] * vx[i] + vy[i] * vy[i]) * 0.5;
+		turb11[i] = 2.0 * mut * dvdx11 * rho_i - 2.0 / 3.0 * kenergy * rho_i;//����tao= ( 2*Vt*Sij-2/3Ksps*�����˺��� )*rho_i// �൱��turbulence(:,:,i)
+		turb12[i] = 2.0 * mut * dvdx12 * rho_i;
+		turb21[i] = 2.0 * mut * dvdx21 * rho_i;
+		turb22[i] = 2.0 * mut * dvdx22 * rho_i - 2.0 / 3.0 * kenergy * rho_i;
+	}//end circle i
+}
+
+
 __global__ void single_step_fluid_dev1(unsigned int particleNum, sph::BoundaryType* btype, double* rho, double* Hsml, double* x, double* y, unsigned int* neibNum, unsigned int** neiblist\
 	, double** bweight, sph::InoutType* iotype, double lengthofx, double** wMxijx, double** wMxijy, double* m_11, double* m_12, double* m_21, double* m_22\
 	, double* press, double* vx, double* vy, double* mass, double* tau11, double* tau12, double* tau21, double* tau22, sph::FluidType* fltype, double dp\
@@ -1946,9 +2971,7 @@ __global__ void single_step_fluid_dev1(unsigned int particleNum, sph::BoundaryTy
 		const double ki = coefficient_heat(fltype[i]);
 		const double ci = specific_heat(fltype[i]);
 		double vcc_temperature_t = 0;
-#ifdef OMP_USE
-#pragma omp parallel for schedule (guided)
-#endif
+
 		//--------wMxij-------
 		for (int j = 0; j < neibNum[i]; j++)
 		{
@@ -2119,6 +3142,466 @@ __global__ void single_step_fluid_dev1(unsigned int particleNum, sph::BoundaryTy
 
 }
 
+__global__ void single_step_fluid_dev1_grid(unsigned int particleNum, sph::BoundaryType* btype, double* rho, double* Hsml, double* x, double* y, unsigned int* neibNum, unsigned int** neiblist\
+	, double** bweight, sph::InoutType* iotype, double lengthofx, double** wMxijx, double** wMxijy, double* m_11, double* m_12, double* m_21, double* m_22\
+	, double* press, double* vx, double* vy, double* mass, double* tau11, double* tau12, double* tau21, double* tau22, sph::FluidType* fltype, double dp\
+	, double C_s, double* turb11, double* turb12, double* turb21, double* turb22, double* temperature, double* M_31, double* M_32, double* M_33, double* M_34, double* M_35\
+	, double* M_51, double* M_52, double* M_53, double* M_54, double* M_55, double* divvel, double* vort, sph::FixType* ftype, double* drho, double* temperature_x, double* temperature_t\
+	, int* xgcell, int* ygcell, int* grid_d, int* celldata, int ngridx, int ngridy, double dxrange, double dyrange) {
+	for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < particleNum; i += gridDim.x * blockDim.x)
+	{
+		//particle* ii = particles[i];
+		const double xi = x[i];
+		const double yi = y[i];
+		const double rho_i = rho[i];
+		const double hsml = Hsml[i];
+		if (btype[i] == sph::BoundaryType::Boundary) continue;
+		//---------density----------
+
+		double drhodt = 0;
+		double drhodiff = 0;
+		//---------internal force-------柯西应力：压力+物理黏性力			
+		double epsilon_2_11 = 0;
+		double epsilon_2_12 = 0;
+		double epsilon_2_21 = 0;
+		double epsilon_2_22 = 0;     //=dudx11
+		//double epsilon_3 = 0;
+		double epsilon_dot11 = 0;
+		double taoxx = 0;
+		double taoyy = 0;
+		double epsilon_dot12 = 0;
+		double epsilon_dot21 = 0;
+		double epsilon_dot22 = 0;
+		//double tau11 = 0;
+		//double tau12 = 0;
+		//double tau21 = 0;
+		//double tau22 = 0;
+		const double p_i = press[i];
+		//--------turbulence---------
+		double dudx11 = 0;//k
+		double dudx12 = 0;
+		double dudx21 = 0;
+		double dudx22 = 0;
+		double sij = 0;
+
+		//----temperature-----目前简化版的，ki和ci为常熟
+		const double ki = coefficient_heat(fltype[i]);
+		const double ci = specific_heat(fltype[i]);
+		double vcc_temperature_t = 0;
+
+		int neibNum = 0;
+
+		//网格所需变量
+		const int minxcell = (xgcell[i] - int(static_cast<double>(ngridx) * 3 * Hsml[i] / dxrange) - 1) > 1 ? (xgcell[i] - int(static_cast<double>(ngridx) * 3 * Hsml[i] / dxrange) - 1) : 1;
+		const int maxxcell = (xgcell[i] + int(static_cast<double>(ngridx) * 3 * Hsml[i] / dxrange) + 1) < ngridx ? (xgcell[i] + int(static_cast<double>(ngridx) * 3 * Hsml[i] / dxrange) + 1) : ngridx;
+		const int minycell = (ygcell[i] - int(static_cast<double>(ngridy) * 3 * Hsml[i] / dyrange) - 1) > 1 ? (ygcell[i] - int(static_cast<double>(ngridy) * 3 * Hsml[i] / dyrange) - 1) : 1;
+		const int maxycell = (ygcell[i] + int(static_cast<double>(ngridy) * 3 * Hsml[i] / dyrange) + 1) < ngridy ? (ygcell[i] + int(static_cast<double>(ngridy) * 3 * Hsml[i] / dyrange) + 1) : ngridy;
+
+		for (auto ycell = minycell; ycell <= maxycell; ycell++)
+		{
+			for (auto xcell = minxcell; xcell <= maxxcell; xcell++)
+			{
+				int j = static_cast<int>(grid_d[(xcell - 1) * ngridy + ycell - 1]) - 1;//网格编号
+				for (j; j > -1; j = celldata[j] - 1)//防止重复比较（并行后取消）
+				{
+					if (i == j)
+						continue;
+
+					double dx = x[i] - x[j];//xi(1)
+
+					const double dy = y[i] - y[j];//xi(2)
+					const double r = sqrt(dx * dx + dy * dy);
+					if (r < 3.3 * Hsml[i]) {			//运行内容
+
+						if (bweight[i][j] < 0.000000001)
+						{
+							neibNum++;
+							continue;
+						}
+
+						wMxijx[i][neibNum] = (m_11[i] * dx + m_12[i] * dy) * bweight[i][neibNum];
+						wMxijy[i][neibNum] = (m_21[i] * dx + m_22[i] * dy) * bweight[i][neibNum];
+
+						neibNum++;
+
+					}
+				}
+			}
+		}
+
+		if (xgcell[i] < 3)//当粒子数较小时，背景网格x=1的网格中有时候只有一竖条粒子，明显不足。需要把x=2的背景网格也拉进来寻找
+		{
+			//std::cerr << std::endl << "find xmimcell: " << xgcell[i - 1] << std::endl;
+			//std::cerr << std::endl << "粒子i = " << i << std::endl;				
+			for (auto ycell = minycell; ycell <= maxycell; ycell++)
+			{
+				for (auto xcell = ngridx - 1; xcell <= ngridx; xcell++) //最右边的两层网格 ngridx 与 ngridx-1
+				{
+					int j = static_cast<int>(grid_d[(xcell - 1) * ngridy + ycell - 1]) - 1;
+					for (j; j > -1; j = celldata[j] - 1)
+					{
+						//除了一般的r，还有周期边界的r2
+						if (iotype[i] == sph::InoutType::Inlet)
+						{
+
+							const double dy = y[i] - y[j];
+							const double dx = x[i] + lengthofx - x[j];
+							const double r = sqrt(dx * dx + dy * dy);
+							if (r < 3.3 * Hsml[i]) {			//运行内容
+
+								if (bweight[i][j] < 0.000000001)
+								{
+									neibNum++;
+									continue;
+								}
+
+								wMxijx[i][neibNum] = (m_11[i] * dx + m_12[i] * dy) * bweight[i][neibNum];
+								wMxijy[i][neibNum] = (m_21[i] * dx + m_22[i] * dy) * bweight[i][neibNum];
+
+								neibNum++;
+
+							}
+						}
+						//std::cerr << std::endl << "j: " << j << std::endl;						
+					}
+				}
+			}
+		}
+		//printf("particle_1's neighberNum is %d\n", neibNum[0]);
+		if ((xgcell[i] >= ngridx - 1) || (xgcell[i] <= ngridx))//当粒子数较小时，背景网格x=1的网格中有时候只有一竖条粒子，明显不足。需要把x=2的背景网格也拉进来寻找
+		{
+			//std::cerr << std::endl << "find xmimcell: " << xgcell[i - 1] << std::endl;
+			//std::cerr << std::endl << "粒子i = " << i << std::endl;				
+			for (auto ycell = minycell; ycell <= maxycell; ycell++)
+			{
+				for (auto xcell = 1; xcell < 3; xcell++) //最左边的两层网格 ngridx 与 ngridx-1
+				{
+					int j = static_cast<int>(grid_d[(xcell - 1) * ngridy + ycell - 1]) - 1;
+					for (j; j > -1; j = celldata[j] - 1)
+					{
+						//除了一般的r，还有周期边界的r2
+						if (iotype[i] == sph::InoutType::Outlet)
+						{
+							const double dy = y[i] - y[j];
+							const double dx = x[i] - lengthofx - x[j];
+							const double r = sqrt(dx * dx + dy * dy);
+							if (r < 3.3 * Hsml[i]) {			//运行内容
+
+								if (bweight[i][j] < 0.000000001)
+								{
+									neibNum++;
+									continue;
+								}
+
+								wMxijx[i][neibNum] = (m_11[i] * dx + m_12[i] * dy) * bweight[i][neibNum];
+								wMxijy[i][neibNum] = (m_21[i] * dx + m_22[i] * dy) * bweight[i][neibNum];
+
+
+								neibNum++;
+
+							}
+						}
+					}
+				}
+			}
+		}
+
+		//printf("neibnum[%d] is %d\n",i, neibNum);
+
+
+		for (auto ycell = minycell; ycell <= maxycell; ycell++)
+		{
+			for (auto xcell = minxcell; xcell <= maxxcell; xcell++)
+			{
+				int j = static_cast<int>(grid_d[(xcell - 1) * ngridy + ycell - 1]) - 1;//网格编号
+				for (j; j > -1; j = celldata[j] - 1)//防止重复比较（并行后取消）
+				{
+					if (i == j)
+						continue;
+
+					double dx = x[i] - x[j];//xi(1)
+
+					const double dy = y[i] - y[j];//xi(2)
+					const double r = sqrt(dx * dx + dy * dy);
+					if (r < 3.3 * Hsml[i]) {			//运行内容
+
+						if (bweight[i][j] < 0.000000001) {
+							neibNum++;
+							continue;
+						}
+						const double rho_j = rho[j];
+
+						const double rho_ij = rho_j - rho_i;
+						const double dvx = vx[j] - vx[i];
+						const double dvy = vy[j] - vy[i];
+						const double massj = mass[j];
+						//---------density---------- 
+						//const double vcc_diff = diffx * wMxijx[i][j] + diffy * wMxijy[i][j];//有问题
+						//const double vcc_rho = dvx * wMxijx[i][j] + dvy * wMxijy[i][j];//速度的散度
+						/*const double b1wMq = m_11[i] * dx + m_12[i] * dy + (ii)->m_13 * dx * dx + (ii)->m_14 * dx * dy + (ii)->m_15 * dy * dy;
+						const double b2wMq = m_21[i] * dx + m_22[i] * dy + (ii)->m_23 * dx * dx + (ii)->m_24 * dx * dy + (ii)->m_25 * dy * dy;
+						const double vcc_diff = diffx * b1wMq + diffy * b2wMq;
+						const double vcc_rho = dvx * b1wMq + dvy * b2wMq;*/
+						//const double chi = 0.2;
+						//drhodiff += bweight[i][j] * chi * c0[i] * hsml * vcc_diff * massj / rho_j;//密度耗散项the density diffusion term
+						//divv += vcc_rho * massj / rho_j;//速度散度
+						//drhodt += - rho_i * vcc_rho * massj / rho_j;//连续性方程已经结束！
+						//--------------------------------temperature---
+						const double kj = coefficient_heat(fltype[j]);
+						const double kij = 0.5 * (ki + kj);
+						const double tij = temperature[j] - temperature[i];
+						const double vcc_temperature_xx = M_31[i] * dx + M_32[i] * dy + M_33[i] * dx * dx + M_34[i] * dx * dy + M_35[i] * dy * dy;//高阶
+						const double vcc_temperature_yy = M_51[i] * dx + M_52[i] * dy + M_53[i] * dx * dx + M_54[i] * dx * dy + M_55[i] * dy * dy;
+
+						vcc_temperature_t += 2.0 * (vcc_temperature_xx + vcc_temperature_yy) * tij * bweight[i][neibNum] * kij * mass[j] / rho_j;//温度的拉普拉斯运算，传热方程已经结束！
+						//if (i == 38) {
+						//	printf("xx[38]=%e, yy[38]=%e, tempt[38]=%e\n", vcc_temperature_xx, vcc_temperature_yy, vcc_temperature_t);
+						//}
+						//----------柯西应力--------   
+
+						//const double A_1 = dvx * wMxijx[i][j] + dvy * wMxijy[i][j];
+
+						//速度算子：2*2的张量
+						epsilon_2_11 += dvx * wMxijx[i][neibNum] * massj / rho_j;//du/dx
+						epsilon_2_12 += dvx * wMxijy[i][neibNum] * massj / rho_j;//du/dy
+						epsilon_2_21 += dvy * wMxijx[i][neibNum] * massj / rho_j;//dv/dx
+						epsilon_2_22 += dvy * wMxijy[i][neibNum] * massj / rho_j;//dv/dy  				
+
+
+						neibNum++;
+
+					}
+				}
+			}
+		}
+
+		if (xgcell[i] < 3)//当粒子数较小时，背景网格x=1的网格中有时候只有一竖条粒子，明显不足。需要把x=2的背景网格也拉进来寻找
+		{
+			//std::cerr << std::endl << "find xmimcell: " << xgcell[i - 1] << std::endl;
+			//std::cerr << std::endl << "粒子i = " << i << std::endl;				
+			for (auto ycell = minycell; ycell <= maxycell; ycell++)
+			{
+				for (auto xcell = ngridx - 1; xcell <= ngridx; xcell++) //最右边的两层网格 ngridx 与 ngridx-1
+				{
+					int j = static_cast<int>(grid_d[(xcell - 1) * ngridy + ycell - 1]) - 1;
+					for (j; j > -1; j = celldata[j] - 1)
+					{
+						//除了一般的r，还有周期边界的r2
+						if (iotype[i] == sph::InoutType::Inlet)
+						{
+
+							const double dy = y[i] - y[j];
+							const double dx = x[i] + lengthofx - x[j];
+							const double r = sqrt(dx * dx + dy * dy);
+							if (r < 3.3 * Hsml[i]) {			//运行内容
+
+								if (bweight[i][j] < 0.000000001) {
+									neibNum++;
+									continue;
+								}
+								const double rho_j = rho[j];
+
+								const double rho_ij = rho_j - rho_i;
+								const double dvx = vx[j] - vx[i];
+								const double dvy = vy[j] - vy[i];
+								const double massj = mass[j];
+								//---------density---------- 
+								//const double vcc_diff = diffx * wMxijx[i][j] + diffy * wMxijy[i][j];//有问题
+								//const double vcc_rho = dvx * wMxijx[i][j] + dvy * wMxijy[i][j];//速度的散度
+								/*const double b1wMq = m_11[i] * dx + m_12[i] * dy + (ii)->m_13 * dx * dx + (ii)->m_14 * dx * dy + (ii)->m_15 * dy * dy;
+								const double b2wMq = m_21[i] * dx + m_22[i] * dy + (ii)->m_23 * dx * dx + (ii)->m_24 * dx * dy + (ii)->m_25 * dy * dy;
+								const double vcc_diff = diffx * b1wMq + diffy * b2wMq;
+								const double vcc_rho = dvx * b1wMq + dvy * b2wMq;*/
+								//const double chi = 0.2;
+								//drhodiff += bweight[i][j] * chi * c0[i] * hsml * vcc_diff * massj / rho_j;//密度耗散项the density diffusion term
+								//divv += vcc_rho * massj / rho_j;//速度散度
+								//drhodt += - rho_i * vcc_rho * massj / rho_j;//连续性方程已经结束！
+								//--------------------------------temperature---
+								const double kj = coefficient_heat(fltype[j]);
+								const double kij = 0.5 * (ki + kj);
+								const double tij = temperature[j] - temperature[i];
+								const double vcc_temperature_xx = M_31[i] * dx + M_32[i] * dy + M_33[i] * dx * dx + M_34[i] * dx * dy + M_35[i] * dy * dy;//高阶
+								const double vcc_temperature_yy = M_51[i] * dx + M_52[i] * dy + M_53[i] * dx * dx + M_54[i] * dx * dy + M_55[i] * dy * dy;
+
+								vcc_temperature_t += 2.0 * (vcc_temperature_xx + vcc_temperature_yy) * tij * bweight[i][neibNum] * kij * mass[j] / rho_j;//温度的拉普拉斯运算，传热方程已经结束！
+								//if (i == 38) {
+								//	printf("xx[38]=%e, yy[38]=%e, tempt[38]=%e\n", vcc_temperature_xx, vcc_temperature_yy, vcc_temperature_t);
+								//}
+								//----------柯西应力--------   
+
+								//const double A_1 = dvx * wMxijx[i][j] + dvy * wMxijy[i][j];
+
+								//速度算子：2*2的张量
+								epsilon_2_11 += dvx * wMxijx[i][neibNum] * massj / rho_j;//du/dx
+								epsilon_2_12 += dvx * wMxijy[i][neibNum] * massj / rho_j;//du/dy
+								epsilon_2_21 += dvy * wMxijx[i][neibNum] * massj / rho_j;//dv/dx
+								epsilon_2_22 += dvy * wMxijy[i][neibNum] * massj / rho_j;//dv/dy  				
+
+
+								neibNum++;
+
+							}
+						}
+						//std::cerr << std::endl << "j: " << j << std::endl;						
+					}
+				}
+			}
+		}
+		//printf("particle_1's neighberNum is %d\n", neibNum[0]);
+		if ((xgcell[i] >= ngridx - 1) || (xgcell[i] <= ngridx))//当粒子数较小时，背景网格x=1的网格中有时候只有一竖条粒子，明显不足。需要把x=2的背景网格也拉进来寻找
+		{
+			//std::cerr << std::endl << "find xmimcell: " << xgcell[i - 1] << std::endl;
+			//std::cerr << std::endl << "粒子i = " << i << std::endl;				
+			for (auto ycell = minycell; ycell <= maxycell; ycell++)
+			{
+				for (auto xcell = 1; xcell < 3; xcell++) //最左边的两层网格 ngridx 与 ngridx-1
+				{
+					int j = static_cast<int>(grid_d[(xcell - 1) * ngridy + ycell - 1]) - 1;
+					for (j; j > -1; j = celldata[j] - 1)
+					{
+						//除了一般的r，还有周期边界的r2
+						if (iotype[i] == sph::InoutType::Outlet)
+						{
+							const double dy = y[i] - y[j];
+							const double dx = x[i] - lengthofx - x[j];
+							const double r = sqrt(dx * dx + dy * dy);
+							if (r < 3.3 * Hsml[i]) {			//运行内容
+
+								if (bweight[i][j] < 0.000000001) { 
+									neibNum++;
+									continue; 
+								}
+								const double rho_j = rho[j];
+
+								const double rho_ij = rho_j - rho_i;
+								const double dvx = vx[j] - vx[i];
+								const double dvy = vy[j] - vy[i];
+								const double massj = mass[j];
+								//---------density---------- 
+								//const double vcc_diff = diffx * wMxijx[i][j] + diffy * wMxijy[i][j];//有问题
+								//const double vcc_rho = dvx * wMxijx[i][j] + dvy * wMxijy[i][j];//速度的散度
+								/*const double b1wMq = m_11[i] * dx + m_12[i] * dy + (ii)->m_13 * dx * dx + (ii)->m_14 * dx * dy + (ii)->m_15 * dy * dy;
+								const double b2wMq = m_21[i] * dx + m_22[i] * dy + (ii)->m_23 * dx * dx + (ii)->m_24 * dx * dy + (ii)->m_25 * dy * dy;
+								const double vcc_diff = diffx * b1wMq + diffy * b2wMq;
+								const double vcc_rho = dvx * b1wMq + dvy * b2wMq;*/
+								//const double chi = 0.2;
+								//drhodiff += bweight[i][j] * chi * c0[i] * hsml * vcc_diff * massj / rho_j;//密度耗散项the density diffusion term
+								//divv += vcc_rho * massj / rho_j;//速度散度
+								//drhodt += - rho_i * vcc_rho * massj / rho_j;//连续性方程已经结束！
+								//--------------------------------temperature---
+								const double kj = coefficient_heat(fltype[j]);
+								const double kij = 0.5 * (ki + kj);
+								const double tij = temperature[j] - temperature[i];
+								const double vcc_temperature_xx = M_31[i] * dx + M_32[i] * dy + M_33[i] * dx * dx + M_34[i] * dx * dy + M_35[i] * dy * dy;//高阶
+								const double vcc_temperature_yy = M_51[i] * dx + M_52[i] * dy + M_53[i] * dx * dx + M_54[i] * dx * dy + M_55[i] * dy * dy;
+
+								vcc_temperature_t += 2.0 * (vcc_temperature_xx + vcc_temperature_yy) * tij * bweight[i][neibNum] * kij * mass[j] / rho_j;//温度的拉普拉斯运算，传热方程已经结束！
+								//if (i == 38) {
+								//	printf("xx[38]=%e, yy[38]=%e, tempt[38]=%e\n", vcc_temperature_xx, vcc_temperature_yy, vcc_temperature_t);
+								//}
+								//----------柯西应力--------   
+
+								//const double A_1 = dvx * wMxijx[i][j] + dvy * wMxijy[i][j];
+
+								//速度算子：2*2的张量
+								epsilon_2_11 += dvx * wMxijx[i][neibNum] * massj / rho_j;//du/dx
+								epsilon_2_12 += dvx * wMxijy[i][neibNum] * massj / rho_j;//du/dy
+								epsilon_2_21 += dvy * wMxijx[i][neibNum] * massj / rho_j;//dv/dx
+								epsilon_2_22 += dvy * wMxijy[i][neibNum] * massj / rho_j;//dv/dy  				
+
+								neibNum++;
+
+							}
+						}
+					}
+				}
+			}
+		}
+
+		//printf("neibnum[%d] is %d\n",i, neibNum);
+
+		//---速度散度			
+		divvel[i] = epsilon_2_11 + epsilon_2_22;//弱可压缩，散度应该不会很大
+
+		//-------------------------------------黏性力----是一个2*2的张量  
+		/*taoxx = epsilon_2_11 - 1. / 3. * divvel[i];
+		taoyy = epsilon_2_22 - 1. / 3. * divvel[i];
+		epsilon_dot12 = (epsilon_2_12 + epsilon_2_21);
+		epsilon_dot21 = epsilon_dot12;	*/
+		//tau11[i] = 2. * sph::Fluid::Viscosity(fltype[i]) * taoxx;//taoxx
+		//tau12[i] = sph::Fluid::Viscosity(fltype[i]) * epsilon_dot12;//taoxy: Viscosity(dv/dx+du/dy)
+		//tau21[i] = tau12[i];//taoyx=taoxy
+		//tau22[i] = 2. * sph::Fluid::Viscosity(fltype[i]) * taoyy;//taoyy
+		//---------对于不可压缩，不再需要求粘性力，再求NS方程了。动量方程中只需要速度的拉普拉斯算子，暂时用一阶算法去求
+		//tau11[i] = epsilon_2_11;//这里的tau11代表速度的偏导
+		//tau12[i] = epsilon_2_12;//
+		//tau21[i] = epsilon_2_21;//
+		//tau22[i] = epsilon_2_22;//
+		// 
+		//-----现求柯西应力：sigema = p + tao
+		//对于不可压缩：黏性切应力 = 2. * sph::Fluid::Viscosity(fltype[i])* 应变
+		//应变为:[ du/dx 0.5*(du/dy+dv/dx) 0.5*(du/dy+dv/dx) dv/dy ]
+		tau11[i] = 2. * Viscosity(fltype[i]) * epsilon_2_11;//这里的tau11代表速度的偏导
+		tau12[i] = Viscosity(fltype[i]) * (epsilon_2_12 + epsilon_2_21);//
+		tau21[i] = tau12[i];//
+		tau22[i] = 2. * Viscosity(fltype[i]) * epsilon_2_22;//
+
+		//-----------------------------涡量 W=0.5(dudx-dvdy)    应变率张量（正应力张量）: S=0.5(dudx+dvdy) divvel
+		double Vort = 0.5 * (epsilon_2_21 - epsilon_2_12);
+		//vort[i] = (epsilon_2_21 - epsilon_2_12);
+		//运用Q准则 Q=0.5*(sqrt(W)-sqrt(S))
+		//vort[i] =0.5* (vort* vort - (0.5* divvel[i])* (0.5 * divvel[i]));
+		vort[i] = Vort;
+		//----------------------------Turbulence----先不管
+		//double dist = 0;
+		//const double y1 = indiameter;//height
+		//const double R = sqrt((xi - 0.2 * y1) * (xi - 0.2 * y1) + yi * yi) - 3 * 0.004;//粒子距圆柱的距离
+		//const double L1 = 0.5 * y1 - abs(yi);
+		////const double L1 = abs(0.5 * y1 - yi);
+		//const double L2 = std::min(xi + 0.08, inlen - xi);
+		////const double L2 = abs(yi - 0.5 * y1);
+		//double temp = std::min(R, L1);//dwall
+		//dist = std::min(temp, L2);
+		//if (dist < 0) {
+		//	dist = 0;
+		//}			
+		const double dvdx11 = epsilon_2_11;
+		const double dvdx12 = (epsilon_2_21 + epsilon_2_12) * 0.5;
+		const double dvdx21 = dvdx12;
+		const double dvdx22 = epsilon_2_22;
+		const double s1ij = sqrt(2.0 * (dvdx11 * dvdx11 + dvdx12 * dvdx12 + dvdx21 * dvdx21 + dvdx22 * dvdx22));
+		//const double mut = std::min(dist * dist * karman * karman, dp * dp * C_s * C_s) * s1ij;//mut=Vt:the turbulence eddy viscosity
+		const double mut = dp * dp * C_s * C_s * s1ij;
+		//const double kenergy = C_v / C_e * dp * dp * s1ij * s1ij; //Ksps=K_turb
+		//对于k的求法，不同的文献有不同的求法。
+		const double kenergy = (vx[i] * vx[i] + vy[i] * vy[i]) * 0.5;
+		turb11[i] = 2.0 * mut * dvdx11 * rho_i - 2.0 / 3.0 * kenergy * rho_i;//����tao= ( 2*Vt*Sij-2/3Ksps*�����˺��� )*rho_i// �൱��turbulence(:,:,i)
+		turb12[i] = 2.0 * mut * dvdx12 * rho_i;
+		turb21[i] = 2.0 * mut * dvdx21 * rho_i;
+		turb22[i] = 2.0 * mut * dvdx22 * rho_i - 2.0 / 3.0 * kenergy * rho_i;
+		//加上耗散函数：
+		const double fai = Viscosity(fltype[i]) * (2 * epsilon_2_11 * epsilon_2_11 +
+			2 * epsilon_2_22 * epsilon_2_22 + (epsilon_2_12 + epsilon_2_21) * (epsilon_2_12 + epsilon_2_21));
+		//连续性方程，温度方程
+		if (ftype[i] != sph::FixType::Fixed) {
+			//drho[i] = drhodt + drhodiff;
+			drho[i] = -rho[i] * divvel[i];
+			//double temp_t = vcc_temperature_t / rho[i] / ci;
+			//加耗散函数：
+			temperature_x[i] = fai;//用来查看值
+			double temp_t = (vcc_temperature_t + fai) / rho[i] / ci;
+			//if (temp_t == temp_t)
+			temperature_t[i] = temp_t;
+		}
+		else {
+			temperature_t[i] = 0;
+			drho[i] = 0;
+		}
+	}//end circle i
+
+}
+
+
 __global__ void single_step_fluid_eom_dev1(unsigned int particleNum, sph::BoundaryType* btype, double* rho, double* Hsml, double* x, double* y,double* C0,double* C\
 	, unsigned int* neibNum, unsigned int** neiblist, double** bweight, sph::InoutType* iotype, double lengthofx, double** wMxijx, double** wMxijy, double* ax, double* ay\
 	, double* m_11, double* m_12, double* m_21, double* m_22, double* press, double* vx, double* vy, double* mass, double* tau11, double* tau12, double* tau21, double* tau22\
@@ -2266,37 +3749,437 @@ __global__ void single_step_fluid_eom_dev1(unsigned int particleNum, sph::Bounda
 
 }
 
+__global__ void single_step_fluid_eom_dev1_grid(unsigned int particleNum, sph::BoundaryType* btype, double* rho, double* Hsml, double* x, double* y, double* C0, double* C\
+	, unsigned int* neibNum, unsigned int** neiblist, double** bweight, sph::InoutType* iotype, double lengthofx, double** wMxijx, double** wMxijy, double* ax, double* ay\
+	, double* m_11, double* m_12, double* m_21, double* m_22, double* press, double* vx, double* vy, double* mass, double* tau11, double* tau12, double* tau21, double* tau22\
+	, double* turb11, double* turb12, double* turb21, double* turb22, double* fintx, double* finty, sph::FixType* ftype, double* Avx, double* Avy, double* turbx, double* turby\
+	, int* xgcell, int* ygcell, int* grid_d, int* celldata, int ngridx, int ngridy, double dxrange, double dyrange) {
+	for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < particleNum; i += gridDim.x * blockDim.x)
+	{
+		if (btype[i] == sph::BoundaryType::Boundary) continue;
+		const double rho_i = rho[i];
+		const double hsml = Hsml[i];
+		const double p_i = press[i];
+		const double xi = x[i];
+		const double yi = y[i];
+		const double c0 = C0[i];
+		const double c = C[i];
+		const double massi = mass[i];
+		//------对柯西应力求导-------			
+		double temp_sigemax = 0;//-px，求对x的偏导
+		double temp_sigemay = 0;//-py，求对y的偏导
+		double temp_taoxx = 0;
+		double temp_taoyy = 0;
+		double temp_taoxy = 0;//黏性力分量:taoxy对y的偏导
+		double temp_taoyx = 0;//黏性力分量:taoyx对x的偏导
+		//--------------------
+		//double turbx = 0;
+		//double turby = 0;
+		double turbxx = 0;
+		double turbyy = 0;
+		double turbxy = 0;//黏性力分量:taoxy对y的偏导
+		double turbyx = 0;//黏性力分量:taoyx对x的偏导
+		//----------artificial viscosity---
+		double avx = 0;
+		double avy = 0;
+
+		int neibNum = 0;
+
+		//网格所需变量
+		const int minxcell = (xgcell[i] - int(static_cast<double>(ngridx) * 3 * Hsml[i] / dxrange) - 1) > 1 ? (xgcell[i] - int(static_cast<double>(ngridx) * 3 * Hsml[i] / dxrange) - 1) : 1;
+		const int maxxcell = (xgcell[i] + int(static_cast<double>(ngridx) * 3 * Hsml[i] / dxrange) + 1) < ngridx ? (xgcell[i] + int(static_cast<double>(ngridx) * 3 * Hsml[i] / dxrange) + 1) : ngridx;
+		const int minycell = (ygcell[i] - int(static_cast<double>(ngridy) * 3 * Hsml[i] / dyrange) - 1) > 1 ? (ygcell[i] - int(static_cast<double>(ngridy) * 3 * Hsml[i] / dyrange) - 1) : 1;
+		const int maxycell = (ygcell[i] + int(static_cast<double>(ngridy) * 3 * Hsml[i] / dyrange) + 1) < ngridy ? (ygcell[i] + int(static_cast<double>(ngridy) * 3 * Hsml[i] / dyrange) + 1) : ngridy;
+
+		for (auto ycell = minycell; ycell <= maxycell; ycell++)
+		{
+			for (auto xcell = minxcell; xcell <= maxxcell; xcell++)
+			{
+				int j = static_cast<int>(grid_d[(xcell - 1) * ngridy + ycell - 1]) - 1;//网格编号
+				for (j; j > -1; j = celldata[j] - 1)//防止重复比较（并行后取消）
+				{
+					if (i == j)
+						continue;
+
+					double dx = x[i] - x[j];//xi(1)
+
+					const double dy = y[i] - y[j];//xi(2)
+					const double r = sqrt(dx * dx + dy * dy);
+					if (r < 3.3 * Hsml[i]) {			//运行内容
+
+						if (bweight[i][j] < 0.000000001) {
+							neibNum++;
+							continue;
+						}
+
+						const double hsmlj = Hsml[j];
+						const double mhsml = (hsml + hsmlj) / 2;
+						const double r2 = dx * dx + dy * dy;
+						const double rho_j = rho[j];
+						const double massj = mass[j];
+
+						//wMxijx[i][j] = (m_11[i] * dx + m_12[i] * dy) * bweight[i][j];
+						//wMxijy[i][j] = (m_21[i] * dx + m_22[i] * dy) * bweight[i][j];
+
+						const double wMxijxV_iix = wMxijx[i][j] * massj / rho_j;
+						const double wMxijyV_iiy = wMxijy[i][j] * massj / rho_j;
+						//const double wMxijxV_jjx = (jj)->wMxijx[j] * massj / rho_j;//(jj)->wMxijx[j] 可能错了
+						//const double wMxijyV_jjy = (jj)->wMxijy[j] * massj / rho_j;
+						const double wMxijxV_jjx = (m_11[j] * dx + m_12[j] * dy) * bweight[i][neibNum] * massj / rho_j;
+						const double wMxijyV_jjy = (m_21[j] * dx + m_22[j] * dy) * bweight[i][neibNum] * massj / rho_j;
+						//-p的梯度
+						/*temp_px += ( p_i - press[jj] ) * wMxijxV_iix;
+						temp_py += ( p_i - press[jj] ) * wMxijyV_iiy;*/
+						//黏性切应力分量求导
+						//temp_taoxx += (tau11[jj] - tau11[i]) * wMxijxV_iix;//du/dx：uxx
+						//temp_taoyy += (tau22[jj] - tau22[i]) * wMxijyV_iiy;//dv/dy：vyy
+						//temp_taoxy += (tau12[jj] - tau12[i]) * wMxijxV_iix;//du/dy: uyy
+						//temp_taoyx += (tau21[jj] - tau21[i]) * wMxijyV_iiy;//dv/dx: vxx  
+						// 
+						//---------------现用柯西应力，态来表示动量方程---------------
+						//sigema_j = [ - p+txx txy tyx p+tyy ]
+						//j粒子----------------有边界粒子
+						const double sigema_j11 = -press[j] + tau11[j];//湍流力一样在这里加
+						const double sigema_j12 = tau12[j];
+						const double sigema_j21 = tau21[j];
+						const double sigema_j22 = -press[j] + tau22[j];
+						//i粒子
+						const double sigema_i11 = -p_i + tau11[i];
+						const double sigema_i12 = tau12[i];
+						const double sigema_i21 = tau21[i];
+						const double sigema_i22 = -p_i + tau22[i];
+						temp_sigemax += (sigema_j11 * wMxijxV_jjx + sigema_j12 * wMxijyV_jjy) + (sigema_i11 * wMxijxV_iix + sigema_j12 * wMxijyV_iiy);
+						temp_sigemay += (sigema_j21 * wMxijxV_jjx + sigema_j22 * wMxijyV_jjy) + (sigema_i21 * wMxijxV_iix + sigema_j22 * wMxijyV_iiy);
+
+						//-----turbulence-------其实也可以将湍流力放到上面的内力一起去				
+						//const double turb_ij11 = turb11[i] * m_11[i] + turb12[i] * m_21[i] + turb11[jj] * m_11[jj] + turb12[jj] * m_21[jj];
+						//const double turb_ij12 = turb11[i] * m_12[i] + turb12[i] * m_22[i] + turb11[jj] * m_12[jj] + turb12[jj] * m_22[jj];
+						//const double turb_ij21 = turb21[i] * m_11[i] + turb22[i] * m_21[i] + turb21[jj] * m_11[jj] + turb22[jj] * m_21[jj];
+						//const double turb_ij22 = turb21[i] * m_12[i] + turb22[i] * m_22[i] + turb21[jj] * m_12[jj] + turb22[jj] * m_22[jj];
+
+						//const double t1 = (turb_ij11 * dx + turb_ij12 * dy) * bweight[i][j];
+						//const double t2 = (turb_ij21 * dx + turb_ij22 * dy) * bweight[i][j];
+
+						//turbx += t1 * massj / rho_j;
+						//turby += t2 * massj / rho_j;//����over
+						turbxx += (turb11[j] - turb11[i]) * wMxijxV_iix;
+						turbyy += (turb22[j] - turb22[i]) * wMxijyV_iiy;
+						turbxy += (turb12[j] - turb12[i]) * wMxijyV_iiy;
+						turbyx += (turb21[j] - turb21[i]) * wMxijxV_iix;
+						//--------artificial viscosity-------
+						const double dvx = vx[j] - vx[i];    //(Vj-Vi)
+						const double dvy = vy[j] - vy[i];
+						double muv = 0;
+						double piv = 0;
+						const double cj = C[j];
+						const double vr = dvx * dx + dvy * dy;     //(Vj-Vi)(Rj-Ri)
+						const double mc = 0.5 * (cj + C[i]);
+						const double mrho = 0.5 * (rho_j + rho[i]);
+
+						if (vr < 0) {
+							muv = mhsml * vr / (r2 + mhsml * mhsml * 0.01);//FAI_ij < 0
+							//piv = (0.5 * muv - 0.5 * mc) * muv / mrho;//beta项-alpha项
+							piv = (0.5 * muv - 1.0 * mc) * muv / mrho;//piv > 0
+							//piv = (0.5 * muv) * muv / mrho;//只有beta项，加速度会一直很大，停不下来，穿透。
+						}
+						//人工黏性项，好像过大
+						avx += -massj * piv * wMxijx[i][neibNum];
+						avy += -massj * piv * wMxijy[i][neibNum];
+
+						neibNum++;
+					}
+				}
+			}
+		}
+		
+
+		if (xgcell[i] < 3)//当粒子数较小时，背景网格x=1的网格中有时候只有一竖条粒子，明显不足。需要把x=2的背景网格也拉进来寻找
+		{
+			//std::cerr << std::endl << "find xmimcell: " << xgcell[i - 1] << std::endl;
+			//std::cerr << std::endl << "粒子i = " << i << std::endl;				
+			for (auto ycell = minycell; ycell <= maxycell; ycell++)
+			{
+				for (auto xcell = ngridx - 1; xcell <= ngridx; xcell++) //最右边的两层网格 ngridx 与 ngridx-1
+				{
+					int j = static_cast<int>(grid_d[(xcell - 1) * ngridy + ycell - 1]) - 1;
+					for (j; j > -1; j = celldata[j] - 1)
+					{
+						//除了一般的r，还有周期边界的r2
+						if (iotype[i] == sph::InoutType::Inlet)
+						{
+
+							const double dy = y[i] - y[j];
+							const double dx = x[i] + lengthofx - x[j];
+							const double r = sqrt(dx * dx + dy * dy);
+							if (r < 3.3 * Hsml[i]) {			//运行内容
+
+								if (bweight[i][j] < 0.000000001) {
+									neibNum++;
+									continue;
+								}
+
+								const double hsmlj = Hsml[j];
+								const double mhsml = (hsml + hsmlj) / 2;
+								const double r2 = dx * dx + dy * dy;
+								const double rho_j = rho[j];
+								const double massj = mass[j];
+
+								//wMxijx[i][j] = (m_11[i] * dx + m_12[i] * dy) * bweight[i][j];
+								//wMxijy[i][j] = (m_21[i] * dx + m_22[i] * dy) * bweight[i][j];
+
+								const double wMxijxV_iix = wMxijx[i][j] * massj / rho_j;
+								const double wMxijyV_iiy = wMxijy[i][j] * massj / rho_j;
+								//const double wMxijxV_jjx = (jj)->wMxijx[j] * massj / rho_j;//(jj)->wMxijx[j] 可能错了
+								//const double wMxijyV_jjy = (jj)->wMxijy[j] * massj / rho_j;
+								const double wMxijxV_jjx = (m_11[j] * dx + m_12[j] * dy) * bweight[i][neibNum] * massj / rho_j;
+								const double wMxijyV_jjy = (m_21[j] * dx + m_22[j] * dy) * bweight[i][neibNum] * massj / rho_j;
+								//-p的梯度
+								/*temp_px += ( p_i - press[jj] ) * wMxijxV_iix;
+								temp_py += ( p_i - press[jj] ) * wMxijyV_iiy;*/
+								//黏性切应力分量求导
+								//temp_taoxx += (tau11[jj] - tau11[i]) * wMxijxV_iix;//du/dx：uxx
+								//temp_taoyy += (tau22[jj] - tau22[i]) * wMxijyV_iiy;//dv/dy：vyy
+								//temp_taoxy += (tau12[jj] - tau12[i]) * wMxijxV_iix;//du/dy: uyy
+								//temp_taoyx += (tau21[jj] - tau21[i]) * wMxijyV_iiy;//dv/dx: vxx  
+								// 
+								//---------------现用柯西应力，态来表示动量方程---------------
+								//sigema_j = [ - p+txx txy tyx p+tyy ]
+								//j粒子----------------有边界粒子
+								const double sigema_j11 = -press[j] + tau11[j];//湍流力一样在这里加
+								const double sigema_j12 = tau12[j];
+								const double sigema_j21 = tau21[j];
+								const double sigema_j22 = -press[j] + tau22[j];
+								//i粒子
+								const double sigema_i11 = -p_i + tau11[i];
+								const double sigema_i12 = tau12[i];
+								const double sigema_i21 = tau21[i];
+								const double sigema_i22 = -p_i + tau22[i];
+								temp_sigemax += (sigema_j11 * wMxijxV_jjx + sigema_j12 * wMxijyV_jjy) + (sigema_i11 * wMxijxV_iix + sigema_j12 * wMxijyV_iiy);
+								temp_sigemay += (sigema_j21 * wMxijxV_jjx + sigema_j22 * wMxijyV_jjy) + (sigema_i21 * wMxijxV_iix + sigema_j22 * wMxijyV_iiy);
+
+								//-----turbulence-------其实也可以将湍流力放到上面的内力一起去				
+								//const double turb_ij11 = turb11[i] * m_11[i] + turb12[i] * m_21[i] + turb11[jj] * m_11[jj] + turb12[jj] * m_21[jj];
+								//const double turb_ij12 = turb11[i] * m_12[i] + turb12[i] * m_22[i] + turb11[jj] * m_12[jj] + turb12[jj] * m_22[jj];
+								//const double turb_ij21 = turb21[i] * m_11[i] + turb22[i] * m_21[i] + turb21[jj] * m_11[jj] + turb22[jj] * m_21[jj];
+								//const double turb_ij22 = turb21[i] * m_12[i] + turb22[i] * m_22[i] + turb21[jj] * m_12[jj] + turb22[jj] * m_22[jj];
+
+								//const double t1 = (turb_ij11 * dx + turb_ij12 * dy) * bweight[i][j];
+								//const double t2 = (turb_ij21 * dx + turb_ij22 * dy) * bweight[i][j];
+
+								//turbx += t1 * massj / rho_j;
+								//turby += t2 * massj / rho_j;//����over
+								turbxx += (turb11[j] - turb11[i]) * wMxijxV_iix;
+								turbyy += (turb22[j] - turb22[i]) * wMxijyV_iiy;
+								turbxy += (turb12[j] - turb12[i]) * wMxijyV_iiy;
+								turbyx += (turb21[j] - turb21[i]) * wMxijxV_iix;
+								//--------artificial viscosity-------
+								const double dvx = vx[j] - vx[i];    //(Vj-Vi)
+								const double dvy = vy[j] - vy[i];
+								double muv = 0;
+								double piv = 0;
+								const double cj = C[j];
+								const double vr = dvx * dx + dvy * dy;     //(Vj-Vi)(Rj-Ri)
+								const double mc = 0.5 * (cj + C[i]);
+								const double mrho = 0.5 * (rho_j + rho[i]);
+
+								if (vr < 0) {
+									muv = mhsml * vr / (r2 + mhsml * mhsml * 0.01);//FAI_ij < 0
+									//piv = (0.5 * muv - 0.5 * mc) * muv / mrho;//beta项-alpha项
+									piv = (0.5 * muv - 1.0 * mc) * muv / mrho;//piv > 0
+									//piv = (0.5 * muv) * muv / mrho;//只有beta项，加速度会一直很大，停不下来，穿透。
+								}
+								//人工黏性项，好像过大
+								avx += -massj * piv * wMxijx[i][neibNum];
+								avy += -massj * piv * wMxijy[i][neibNum];
+
+								neibNum++;
+							}
+						}
+					}
+					//std::cerr << std::endl << "j: " << j << std::endl;						
+				}
+			}
+		}
+		
+		//printf("particle_1's neighberNum is %d\n", neibNum[0]);
+		if ((xgcell[i] >= ngridx - 1) || (xgcell[i] <= ngridx))//当粒子数较小时，背景网格x=1的网格中有时候只有一竖条粒子，明显不足。需要把x=2的背景网格也拉进来寻找
+		{
+			//std::cerr << std::endl << "find xmimcell: " << xgcell[i - 1] << std::endl;
+			//std::cerr << std::endl << "粒子i = " << i << std::endl;				
+			for (auto ycell = minycell; ycell <= maxycell; ycell++)
+			{
+				for (auto xcell = 1; xcell < 3; xcell++) //最左边的两层网格 ngridx 与 ngridx-1
+				{
+					int j = static_cast<int>(grid_d[(xcell - 1) * ngridy + ycell - 1]) - 1;
+					for (j; j > -1; j = celldata[j] - 1)
+					{
+						//除了一般的r，还有周期边界的r2
+						if (iotype[i] == sph::InoutType::Outlet)
+						{
+							const double dy = y[i] - y[j];
+							const double dx = x[i] - lengthofx - x[j];
+							const double r = sqrt(dx * dx + dy * dy);
+							if (r < 3.3 * Hsml[i]) {			//运行内容
+
+								if (bweight[i][j] < 0.000000001) {
+									neibNum++;
+									continue;
+								}
+
+								const double hsmlj = Hsml[j];
+								const double mhsml = (hsml + hsmlj) / 2;
+								const double r2 = dx * dx + dy * dy;
+								const double rho_j = rho[j];
+								const double massj = mass[j];
+
+								//wMxijx[i][j] = (m_11[i] * dx + m_12[i] * dy) * bweight[i][j];
+								//wMxijy[i][j] = (m_21[i] * dx + m_22[i] * dy) * bweight[i][j];
+
+								const double wMxijxV_iix = wMxijx[i][j] * massj / rho_j;
+								const double wMxijyV_iiy = wMxijy[i][j] * massj / rho_j;
+								//const double wMxijxV_jjx = (jj)->wMxijx[j] * massj / rho_j;//(jj)->wMxijx[j] 可能错了
+								//const double wMxijyV_jjy = (jj)->wMxijy[j] * massj / rho_j;
+								const double wMxijxV_jjx = (m_11[j] * dx + m_12[j] * dy) * bweight[i][neibNum] * massj / rho_j;
+								const double wMxijyV_jjy = (m_21[j] * dx + m_22[j] * dy) * bweight[i][neibNum] * massj / rho_j;
+								//-p的梯度
+								/*temp_px += ( p_i - press[jj] ) * wMxijxV_iix;
+								temp_py += ( p_i - press[jj] ) * wMxijyV_iiy;*/
+								//黏性切应力分量求导
+								//temp_taoxx += (tau11[jj] - tau11[i]) * wMxijxV_iix;//du/dx：uxx
+								//temp_taoyy += (tau22[jj] - tau22[i]) * wMxijyV_iiy;//dv/dy：vyy
+								//temp_taoxy += (tau12[jj] - tau12[i]) * wMxijxV_iix;//du/dy: uyy
+								//temp_taoyx += (tau21[jj] - tau21[i]) * wMxijyV_iiy;//dv/dx: vxx  
+								// 
+								//---------------现用柯西应力，态来表示动量方程---------------
+								//sigema_j = [ - p+txx txy tyx p+tyy ]
+								//j粒子----------------有边界粒子
+								const double sigema_j11 = -press[j] + tau11[j];//湍流力一样在这里加
+								const double sigema_j12 = tau12[j];
+								const double sigema_j21 = tau21[j];
+								const double sigema_j22 = -press[j] + tau22[j];
+								//i粒子
+								const double sigema_i11 = -p_i + tau11[i];
+								const double sigema_i12 = tau12[i];
+								const double sigema_i21 = tau21[i];
+								const double sigema_i22 = -p_i + tau22[i];
+								temp_sigemax += (sigema_j11 * wMxijxV_jjx + sigema_j12 * wMxijyV_jjy) + (sigema_i11 * wMxijxV_iix + sigema_j12 * wMxijyV_iiy);
+								temp_sigemay += (sigema_j21 * wMxijxV_jjx + sigema_j22 * wMxijyV_jjy) + (sigema_i21 * wMxijxV_iix + sigema_j22 * wMxijyV_iiy);
+
+								//-----turbulence-------其实也可以将湍流力放到上面的内力一起去				
+								//const double turb_ij11 = turb11[i] * m_11[i] + turb12[i] * m_21[i] + turb11[jj] * m_11[jj] + turb12[jj] * m_21[jj];
+								//const double turb_ij12 = turb11[i] * m_12[i] + turb12[i] * m_22[i] + turb11[jj] * m_12[jj] + turb12[jj] * m_22[jj];
+								//const double turb_ij21 = turb21[i] * m_11[i] + turb22[i] * m_21[i] + turb21[jj] * m_11[jj] + turb22[jj] * m_21[jj];
+								//const double turb_ij22 = turb21[i] * m_12[i] + turb22[i] * m_22[i] + turb21[jj] * m_12[jj] + turb22[jj] * m_22[jj];
+
+								//const double t1 = (turb_ij11 * dx + turb_ij12 * dy) * bweight[i][j];
+								//const double t2 = (turb_ij21 * dx + turb_ij22 * dy) * bweight[i][j];
+
+								//turbx += t1 * massj / rho_j;
+								//turby += t2 * massj / rho_j;//����over
+								turbxx += (turb11[j] - turb11[i]) * wMxijxV_iix;
+								turbyy += (turb22[j] - turb22[i]) * wMxijyV_iiy;
+								turbxy += (turb12[j] - turb12[i]) * wMxijyV_iiy;
+								turbyx += (turb21[j] - turb21[i]) * wMxijxV_iix;
+								//--------artificial viscosity-------
+								const double dvx = vx[j] - vx[i];    //(Vj-Vi)
+								const double dvy = vy[j] - vy[i];
+								double muv = 0;
+								double piv = 0;
+								const double cj = C[j];
+								const double vr = dvx * dx + dvy * dy;     //(Vj-Vi)(Rj-Ri)
+								const double mc = 0.5 * (cj + C[i]);
+								const double mrho = 0.5 * (rho_j + rho[i]);
+
+								if (vr < 0) {
+									muv = mhsml * vr / (r2 + mhsml * mhsml * 0.01);//FAI_ij < 0
+									//piv = (0.5 * muv - 0.5 * mc) * muv / mrho;//beta项-alpha项
+									piv = (0.5 * muv - 1.0 * mc) * muv / mrho;//piv > 0
+									//piv = (0.5 * muv) * muv / mrho;//只有beta项，加速度会一直很大，停不下来，穿透。
+								}
+								//人工黏性项，好像过大
+								avx += -massj * piv * wMxijx[i][neibNum];
+								avy += -massj * piv * wMxijy[i][neibNum];
+								neibNum++;
+							}
+
+
+						}
+					}
+				}
+			}
+		}
+		
+		//printf("neibnum[%d] is %d\n",i, neibNum);
+
+		fintx[i] = temp_sigemax / rho_i;//不对
+		finty[i] = temp_sigemay / rho_i;
+		turbx[i] = turbxx + turbxy;
+		turby[i] = turbyy + turbyx;
+		Avx[i] = avx;
+		Avy[i] = avy;
+		///if (iotype[i] == InoutType::Fluid|| iotype[i] == InoutType::Outlet) 
+		if (ftype[i] != sph::FixType::Fixed)//inlet粒子的加速度场为0，只有初始速度。outlet粒子呢？
+		{
+			//ax[i] = fintx + avx + turbx;
+			//ay[i] = finty + avy + turby;
+			ax[i] = fintx[i] + avx;
+			ay[i] = finty[i] + avy;
+			//ay[i] = 0;
+			//ax[i] = fintx + avx + turbx + replx;
+			//ay[i] = finty + avy + turby + reply + gravity;				
+		}
+
+	}
+
+}
+
 void single_temp_eos_dev0(unsigned int particleNum, sph::BoundaryType* btype, double* C0, double* Rho0, double* rho, double* Gamma, double* back_p, double* press) {
 	single_temp_eos_dev1<<<32,512>>>(particleNum, btype, C0, Rho0, rho, Gamma, back_p, press);
 	CHECK(cudaDeviceSynchronize());
 }
 
 void single_temp_boundary_dev0(unsigned int particleNum, sph::BoundaryType* btype, unsigned int* neibNum, unsigned int** neiblist, sph::FixType* ftype, double* mass, double* rho\
-	, double* press, double** bweight, double* vx, double* vy, double* Vcc) {
-	single_temp_boundary_dev1<<<32,512>>>(particleNum, btype, neibNum, neiblist, ftype, mass, rho\
-		, press, bweight, vx, vy, Vcc);
+	, double* press, double** bweight, double* vx, double* vy, double* Vcc, int* xgcell, int* ygcell, int* grid_d, int* celldata\
+	, int ngridx, int ngridy, double dxrange, double dyrange, double* hsml, double* x, double* y, sph::InoutType* iotype, double lengthofx) {
+	/*single_temp_boundary_dev1<<<32,512>>>(particleNum, btype, neibNum, neiblist, ftype, mass, rho\
+		, press, bweight, vx, vy, Vcc);*/
+	single_temp_boundary_dev1_grid<<<32,256>>>(particleNum,  btype, neibNum, neiblist, ftype, mass, rho\
+		, press, bweight, vx, vy, Vcc, xgcell, ygcell, grid_d, celldata\
+		, ngridx, ngridy, dxrange, dyrange, hsml, x, y, iotype, lengthofx);
 	CHECK(cudaDeviceSynchronize());
 }
 
 void single_temp_shapematrix_dev0(unsigned int particleNum, sph::BoundaryType* btype, double* rho, double* Hsml, double* x, double* y, unsigned int* neibNum, unsigned int** neiblist\
 	, double** bweight, sph::InoutType* iotype, double lengthofx, double* mass, double* m_11, double* m_12, double* m_21, double* m_22, double* M_11\
 	, double* M_12, double* M_13, double* M_14, double* M_15, double* M_21, double* M_22, double* M_23, double* M_24, double* M_25\
-	, double* M_31, double* M_32, double* M_33, double* M_34, double* M_35, double* M_51, double* M_52, double* M_53, double* M_54, double* M_55) {
-	single_temp_shapematrix_dev1 << <32, 512 >> > (particleNum, btype, rho, Hsml, x, y, neibNum, neiblist\
+	, double* M_31, double* M_32, double* M_33, double* M_34, double* M_35, double* M_51, double* M_52, double* M_53, double* M_54, double* M_55\
+	, int* xgcell, int* ygcell, int* grid_d, int* celldata, int ngridx, int ngridy, double dxrange, double dyrange) {
+	/*single_temp_shapematrix_dev1 << <32, 512 >> > (particleNum, btype, rho, Hsml, x, y, neibNum, neiblist\
 		, bweight, iotype, lengthofx, mass, m_11, m_12, m_21, m_22, M_11\
 		, M_12, M_13, M_14, M_15, M_21, M_22, M_23, M_24, M_25\
-		, M_31, M_32, M_33, M_34, M_35, M_51, M_52, M_53, M_54, M_55);
+		, M_31, M_32, M_33, M_34, M_35, M_51, M_52, M_53, M_54, M_55);*/
+	single_temp_shapematrix_dev1_grid << <32, 256 >> > (particleNum, btype, rho, Hsml, x, y, neibNum, neiblist\
+		, bweight, iotype, lengthofx, mass, m_11, m_12, m_21, m_22, M_11\
+		, M_12, M_13, M_14, M_15, M_21, M_22, M_23, M_24, M_25\
+		, M_31, M_32, M_33, M_34, M_35, M_51, M_52, M_53, M_54, M_55\
+		, xgcell, ygcell, grid_d, celldata, ngridx, ngridy, dxrange, dyrange);
 	CHECK(cudaDeviceSynchronize());
 }
 
 void single_temp_bdvisco_dev0(unsigned int particleNum, sph::BoundaryType* btype, double* rho, double* Hsml, double* x, double* y, unsigned int* neibNum, unsigned int** neiblist\
 	, double** bweight, sph::InoutType* iotype, double lengthofx, double** wMxijx, double** wMxijy, double* m_11, double* m_12, double* m_21, double* m_22\
 	, double* press, double* vx, double* vy, double* mass, double* Tau11, double* Tau12, double* Tau21, double* Tau22, sph::FluidType* fltype, double dp\
-	, double C_s, double* turb11, double* turb12, double* turb21, double* turb22) {
-	single_temp_bdvisco_dev1 << <32, 512 >> > (particleNum, btype, rho, Hsml, x, y, neibNum, neiblist\
+	, double C_s, double* turb11, double* turb12, double* turb21, double* turb22\
+	, int* xgcell, int* ygcell, int* grid_d, int* celldata, int ngridx, int ngridy, double dxrange, double dyrange) {
+	/*single_temp_bdvisco_dev1 << <32, 512 >> > (particleNum, btype, rho, Hsml, x, y, neibNum, neiblist\
 		, bweight, iotype, lengthofx, wMxijx, wMxijy, m_11, m_12, m_21, m_22\
 		, press, vx, vy, mass, Tau11, Tau12, Tau21, Tau22, fltype, dp\
-		, C_s, turb11, turb12, turb21, turb22);
+		, C_s, turb11, turb12, turb21, turb22);*/
+	single_temp_bdvisco_dev1_grid << <32, 256 >> > (particleNum, btype, rho, Hsml, x, y, neibNum, neiblist\
+		, bweight, iotype, lengthofx, wMxijx, wMxijy, m_11, m_12, m_21, m_22\
+		, press, vx, vy, mass, Tau11, Tau12, Tau21, Tau22, fltype, dp\
+		, C_s, turb11, turb12, turb21, turb22\
+		, xgcell, ygcell, grid_d, celldata, ngridx, ngridy, dxrange, dyrange);
 	CHECK(cudaDeviceSynchronize());
 }
 
@@ -2304,22 +4187,35 @@ void single_step_fluid_dev0(unsigned int particleNum, sph::BoundaryType* btype, 
 	, double** bweight, sph::InoutType* iotype, double lengthofx, double** wMxijx, double** wMxijy, double* m_11, double* m_12, double* m_21, double* m_22\
 	, double* press, double* vx, double* vy, double* mass, double* tau11, double* tau12, double* tau21, double* tau22, sph::FluidType* fltype, double dp\
 	, double C_s, double* turb11, double* turb12, double* turb21, double* turb22, double* temperature, double* M_31, double* M_32, double* M_33, double* M_34, double* M_35\
-	, double* M_51, double* M_52, double* M_53, double* M_54, double* M_55, double* divvel, double* vort, sph::FixType* ftype, double* drho, double* temperature_x, double* temperature_t) {
-	single_step_fluid_dev1<<<32,512>>>(particleNum, btype, rho, Hsml, x, y, neibNum, neiblist\
+	, double* M_51, double* M_52, double* M_53, double* M_54, double* M_55, double* divvel, double* vort, sph::FixType* ftype, double* drho, double* temperature_x, double* temperature_t\
+	, int* xgcell, int* ygcell, int* grid_d, int* celldata, int ngridx, int ngridy, double dxrange, double dyrange) {
+	/*single_step_fluid_dev1<<<32,512>>>(particleNum, btype, rho, Hsml, x, y, neibNum, neiblist\
 		, bweight, iotype, lengthofx, wMxijx, wMxijy, m_11, m_12, m_21, m_22\
 		, press, vx, vy, mass, tau11, tau12, tau21, tau22, fltype, dp\
 		, C_s, turb11, turb12, turb21, turb22, temperature, M_31, M_32, M_33, M_34, M_35\
-		, M_51, M_52, M_53, M_54, M_55, divvel, vort, ftype, drho, temperature_x, temperature_t);
+		, M_51, M_52, M_53, M_54, M_55, divvel, vort, ftype, drho, temperature_x, temperature_t);*/
+	single_step_fluid_dev1_grid << <32, 256 >> > (particleNum, btype, rho, Hsml, x, y, neibNum, neiblist\
+		, bweight, iotype, lengthofx, wMxijx, wMxijy, m_11, m_12, m_21, m_22\
+		, press, vx, vy, mass, tau11, tau12, tau21, tau22, fltype, dp\
+		, C_s, turb11, turb12, turb21, turb22, temperature, M_31, M_32, M_33, M_34, M_35\
+		, M_51, M_52, M_53, M_54, M_55, divvel, vort, ftype, drho, temperature_x, temperature_t\
+		, xgcell, ygcell, grid_d, celldata, ngridx, ngridy, dxrange, dyrange);
 	CHECK(cudaDeviceSynchronize());
 }
 
 void single_step_fluid_eom_dev0(unsigned int particleNum, sph::BoundaryType* btype, double* rho, double* Hsml, double* x, double* y, double* C0, double* C\
 	, unsigned int* neibNum, unsigned int** neiblist, double** bweight, sph::InoutType* iotype, double lengthofx, double** wMxijx, double** wMxijy, double* ax, double* ay\
 	, double* m_11, double* m_12, double* m_21, double* m_22, double* press, double* vx, double* vy, double* mass, double* tau11, double* tau12, double* tau21, double* tau22\
-	, double* turb11, double* turb12, double* turb21, double* turb22, double* fintx, double* finty, sph::FixType* ftype, double* Avx, double* Avy, double* turbx, double* turby) {
-	single_step_fluid_eom_dev1 << <32, 512 >> > (particleNum, btype, rho, Hsml, x, y, C0, C\
+	, double* turb11, double* turb12, double* turb21, double* turb22, double* fintx, double* finty, sph::FixType* ftype, double* Avx, double* Avy, double* turbx, double* turby\
+	, int* xgcell, int* ygcell, int* grid_d, int* celldata, int ngridx, int ngridy, double dxrange, double dyrange) {
+	//single_step_fluid_eom_dev1 << <32, 512 >> > (particleNum, btype, rho, Hsml, x, y, C0, C\
+	//	, neibNum, neiblist, bweight, iotype, lengthofx, wMxijx, wMxijy, ax, ay\
+	//	, m_11, m_12, m_21, m_22, press, vx, vy, mass, tau11, tau12, tau21, tau22\
+	//	, turb11, turb12, turb21, turb22, fintx, finty, ftype, Avx, Avy, turbx, turby);
+	single_step_fluid_eom_dev1_grid << <32, 256 >> > (particleNum, btype, rho, Hsml, x, y, C0, C\
 		, neibNum, neiblist, bweight, iotype, lengthofx, wMxijx, wMxijy, ax, ay\
 		, m_11, m_12, m_21, m_22, press, vx, vy, mass, tau11, tau12, tau21, tau22\
-		, turb11, turb12, turb21, turb22, fintx, finty, ftype, Avx, Avy, turbx, turby);
+		, turb11, turb12, turb21, turb22, fintx, finty, ftype, Avx, Avy, turbx, turby\
+		, xgcell, ygcell, grid_d, celldata, ngridx, ngridy, dxrange, dyrange);
 	CHECK(cudaDeviceSynchronize());
 }

@@ -216,9 +216,9 @@ namespace sph {
 		cudaMemPrefetchAsync(uy, sizeof(double) * particleNum, deviceId, NULL);
 		cudaMemPrefetchAsync(neibNum, sizeof(unsigned int) * particleNum, deviceId, NULL);
 		cudaMemPrefetchAsync(idx, sizeof(unsigned int) * particleNum, deviceId, NULL);
-		cudaMemPrefetchAsync(neiblist, sizeof(unsigned int) * particleNum, deviceId, NULL);
-		for (int i = 0; i < particleNum; i++) 
-			cudaMemPrefetchAsync(neiblist[i], sizeof(unsigned int) * MAX_NEIB, deviceId, NULL);
+		//cudaMemPrefetchAsync(neiblist, sizeof(unsigned int) * particleNum, deviceId, NULL);
+		//for (int i = 0; i < particleNum; i++) 
+		//	cudaMemPrefetchAsync(neiblist[i], sizeof(unsigned int) * MAX_NEIB, deviceId, NULL);
 		/*
 			particlesa.half_x[i] = particlesa.x[i];//i时刻的位置
 			particlesa.half_y[i] = particlesa.y[i];
@@ -298,10 +298,10 @@ namespace sph {
 
 		////std::vector<class particle*> neiblist;
 		cudaMallocManaged(&neibNum, idp * sizeof(unsigned int));
-		cudaMallocManaged(&neiblist, idp * sizeof(unsigned int*));
-		for (int i = 0; i < idp; i++) {
-			cudaMallocManaged(&neiblist[i], MAX_NEIB * sizeof(unsigned int));
-		}
+		//cudaMallocManaged(&neiblist, idp * sizeof(unsigned int*));
+		//for (int i = 0; i < idp; i++) {
+		//	cudaMallocManaged(&neiblist[i], MAX_NEIB * sizeof(unsigned int));
+		//}
 
 
 		cudaMallocManaged(&bweight, idp * sizeof(double*));
@@ -505,7 +505,7 @@ namespace sph {
 			half_temperature[i] = particles[i]->half_temperature;
 		}
 		printf("initialize have been accomplished.\n");
-		printf("particlesa.neibList[0]=%d\n", neiblist[0]);
+		//printf("particlesa.neibList[0]=%d\n", neiblist[0]);
 	}
 
 	/*

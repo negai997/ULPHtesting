@@ -127,6 +127,20 @@ namespace sph {
 		~domain();
 
 	private:
+		//提出网格所需的指针外置
+		double dxrange ;
+		double dyrange ;
+		int ngridx ;
+		int ngridy ;
+		double* x_max;
+		double* x_min;
+		double* y_max;
+		double* y_min;
+		int* grid_d;
+		int* xgcell;//三个数组，分别来存储每个粒子的编号信息
+		int* ygcell;
+		int* celldata;
+
 		double dp=0;//particle distance
 		double p0=0;
 		unsigned int istep=0;
@@ -1090,10 +1104,10 @@ namespace sph {
 		double x_min = DBL_MAX;
 		double y_max = DBL_MIN;
 		double y_min = DBL_MAX;*/
-		double* x_max;
-		double* x_min;
-		double* y_max;
-		double* y_min;
+		//double* x_max;
+		//double* x_min;
+		//double* y_max;
+		//double* y_min;
 
 		cudaMallocManaged(&x_max, sizeof(double));
 		cudaMallocManaged(&x_min, sizeof(double));
@@ -1113,19 +1127,20 @@ namespace sph {
 		*y_max += 5.0 * dp;
 		*y_min -= 5.0 * dp;
 		//确定计算域
-		const double dxrange = *x_max - *x_min;
-		const double dyrange = *y_max - *y_min;
+		dxrange = *x_max - *x_min;
+		dyrange = *y_max - *y_min;
 		//printf("\nallow us to test the range of which:x:%lf and y:%lf\n", dxrange, dyrange);
 
 		const int ntotal = static_cast<int>(particles.size());
 		//const int gtotal = static_cast<int>(ghosts.size());
 		//const int ngtotal = ntotal + gtotal;
 		//给计算域确定网格的数量，比如整个计算域需要划分成10（ngridx）*8（ngridy）个网格
-		const int ngridx = std::min(int(pow(ntotal * dxrange / (dyrange * 3), 1.0 / 3.0)) + 1, xgridmax);
-		const int ngridy = std::min(int(ngridx * dyrange / dxrange) + 1, ygridmax);
+
+		ngridx = std::min(int(pow(ntotal * dxrange / (dyrange * 3), 1.0 / 3.0)) + 1, xgridmax);
+		ngridy = std::min(int(ngridx * dyrange / dxrange) + 1, ygridmax);
 
 		//math::matrix grid(ngridx, ngridy);//网格编号，使用矩阵来对网格进行编号。（10，8）
-		int* grid_d;
+		//int* grid_d;
 		cudaMallocManaged(&grid_d, sizeof(int) * ngridx * ngridy);
 		for (int gridi = 0; gridi < ngridx * ngridy; gridi++) {
 			grid_d[gridi] = 0;
@@ -1135,9 +1150,10 @@ namespace sph {
 		//int* xgcell = new int[ntotal];//三个数组，分别来存储每个粒子的编号信息
 		//int* ygcell = new int[ntotal];
 		//int* celldata = new int[ntotal];
-		int* xgcell ;//三个数组，分别来存储每个粒子的编号信息
-		int* ygcell ;
-		int* celldata ;
+		// 
+		//int* xgcell ;//三个数组，分别来存储每个粒子的编号信息
+		//int* ygcell ;
+		//int* celldata ;
 		cudaMallocManaged(&xgcell, sizeof(int) * ntotal);
 		cudaMallocManaged(&ygcell, sizeof(int) * ntotal);
 		cudaMallocManaged(&celldata, sizeof(int) * ntotal);
@@ -1154,14 +1170,14 @@ namespace sph {
 			, ngridx, ngridy, dxrange, dyrange, *x_min, *y_min\
 			, xgcell, ygcell, celldata, grid_d, particlesa.hsml, particlesa.idx, particlesa.iotype, lengthofx);
 
-		cudaFree(x_max);
-		cudaFree(x_min);
-		cudaFree(y_max);
-		cudaFree(y_min);
-		cudaFree(grid_d);
-		cudaFree(xgcell);
-		cudaFree(ygcell);
-		cudaFree(celldata);
+		//cudaFree(x_max);
+		//cudaFree(x_min);
+		//cudaFree(y_max);
+		//cudaFree(y_min);
+		//cudaFree(grid_d);
+		//cudaFree(xgcell);
+		//cudaFree(ygcell);
+		//cudaFree(celldata);
 		const std::clock_t end = std::clock();
 		//this->debugNeib(1240);
 		//this->debugNeib(1239);
@@ -1259,7 +1275,7 @@ namespace sph {
 		const std::clock_t begin = std::clock();
 
 		singlestep_updateWeight_dev0(particleNum(), particlesa.neibNum, particlesa.hsml, particlesa.neiblist, particlesa.x, particlesa.y\
-			, particlesa.iotype, lengthofx, particlesa.bweight, particlesa.dbweightx, particlesa.dbweighty);
+			, particlesa.iotype, lengthofx, particlesa.bweight, particlesa.dbweightx, particlesa.dbweighty,grid_d , xgcell, ygcell, celldata, ngridx, ngridy, dxrange, dyrange);
 //#ifdef OMP_USE
 //#pragma omp parallel for schedule (guided)
 //#endif
@@ -1831,7 +1847,17 @@ namespace sph {
 
 
 
-		if (stype == ShiftingType::None) return;
+		if (stype == ShiftingType::None) {
+			cudaFree(x_max);
+			cudaFree(x_min);
+			cudaFree(y_max);
+			cudaFree(y_min);
+			cudaFree(grid_d);
+			cudaFree(xgcell);
+			cudaFree(ygcell);
+			cudaFree(celldata);
+			return;
+		}
 
 		double* drmax_d;
 		double* drmax2_d;
@@ -1855,11 +1881,21 @@ namespace sph {
 				, particlesa.shift_x, particlesa.shift_y, particlesa.x, particlesa.y, particlesa.ux, particlesa.uy, drmax_d, drmax2_d, lock);
 
 		}
+
 		drmax = *drmax_d;
 		drmax2 = *drmax2_d;
 		cudaFree(drmax_d);
 		cudaFree(drmax2_d);
 		cudaFree(lock);
+
+		cudaFree(x_max);
+		cudaFree(x_min);
+		cudaFree(y_max);
+		cudaFree(y_min);
+		cudaFree(grid_d);
+		cudaFree(xgcell);
+		cudaFree(ygcell);
+		cudaFree(celldata);
 	}
 	//求解温度、运动
 	inline void domain::single_step_temperature_gaojie() {
@@ -1871,7 +1907,8 @@ namespace sph {
 		this->updateWeight();
 		// boundary pressure  and 无滑移速度边界条件	上下固壁为自由滑移，圆柱边界为无滑移边界
 		single_temp_boundary_dev0(particleNum(), particlesa.btype, particlesa.neibNum, particlesa.neiblist, particlesa.ftype, particlesa.mass, particlesa.rho\
-			, particlesa.press, particlesa.bweight, particlesa.vx, particlesa.vy, particlesa.vcc);
+			, particlesa.press, particlesa.bweight, particlesa.vx, particlesa.vy, particlesa.vcc, xgcell, ygcell, grid_d, celldata\
+			, ngridx, ngridy, dxrange, dyrange, particlesa.hsml, particlesa.x, particlesa.y, particlesa.iotype, lengthofx);
 
 
 		//this->updateGhostInfo();
@@ -1882,7 +1919,8 @@ namespace sph {
 		single_temp_shapematrix_dev0(particleNum(), particlesa.btype, particlesa.rho, particlesa.hsml, particlesa.x, particlesa.y, particlesa.neibNum, particlesa.neiblist\
 			, particlesa.bweight, particlesa.iotype, lengthofx, particlesa.mass, particlesa.m_11, particlesa.m_12, particlesa.m_21, particlesa.m_22, particlesa.M_11\
 			, particlesa.M_12, particlesa.M_13, particlesa.M_14, particlesa.M_15, particlesa.M_21, particlesa.M_22, particlesa.M_23, particlesa.M_24, particlesa.M_25\
-			, particlesa.M_31, particlesa.M_32, particlesa.M_33, particlesa.M_34, particlesa.M_35, particlesa.M_51, particlesa.M_52, particlesa.M_53, particlesa.M_54, particlesa.M_55);
+			, particlesa.M_31, particlesa.M_32, particlesa.M_33, particlesa.M_34, particlesa.M_35, particlesa.M_51, particlesa.M_52, particlesa.M_53, particlesa.M_54, particlesa.M_55\
+			, xgcell, ygcell, grid_d, celldata, ngridx, ngridy, dxrange, dyrange);
 
 
 
@@ -1890,7 +1928,8 @@ namespace sph {
 		single_temp_bdvisco_dev0  (particleNum(), particlesa.btype, particlesa.rho, particlesa.hsml, particlesa.x, particlesa.y, particlesa.neibNum, particlesa.neiblist\
 			, particlesa.bweight, particlesa.iotype, lengthofx, particlesa.wMxijx, particlesa.wMxijy, particlesa.m_11, particlesa.m_12, particlesa.m_21, particlesa.m_22\
 			, particlesa.press, particlesa.vx, particlesa.vy, particlesa.mass, particlesa.tau11, particlesa.tau12, particlesa.tau21, particlesa.tau22, particlesa.fltype, dp\
-			, C_s, particlesa.turb11, particlesa.turb12, particlesa.turb21, particlesa.turb22);
+			, C_s, particlesa.turb11, particlesa.turb12, particlesa.turb21, particlesa.turb22\
+			, xgcell, ygcell, grid_d, celldata, ngridx, ngridy, dxrange, dyrange);
 
 
 		// density 连续性方程
@@ -1905,13 +1944,15 @@ namespace sph {
 			, particlesa.bweight, particlesa.iotype, lengthofx, particlesa.wMxijx, particlesa.wMxijy, particlesa.m_11, particlesa.m_12, particlesa.m_21, particlesa.m_22\
 			, particlesa.press, particlesa.vx, particlesa.vy, particlesa.mass, particlesa.tau11, particlesa.tau12, particlesa.tau21, particlesa.tau22, particlesa.fltype, dp\
 			, C_s, particlesa.turb11, particlesa.turb12, particlesa.turb21, particlesa.turb22, particlesa.temperature, particlesa.M_31, particlesa.M_32, particlesa.M_33, particlesa.M_34, particlesa.M_35\
-			, particlesa.M_51, particlesa.M_52, particlesa.M_53, particlesa.M_54, particlesa.M_55, particlesa.divvel, particlesa.vort, particlesa.ftype, particlesa.drho, particlesa.temperature_x, particlesa.temperature_t);
+			, particlesa.M_51, particlesa.M_52, particlesa.M_53, particlesa.M_54, particlesa.M_55, particlesa.divvel, particlesa.vort, particlesa.ftype, particlesa.drho, particlesa.temperature_x, particlesa.temperature_t\
+			, xgcell, ygcell, grid_d, celldata, ngridx, ngridy, dxrange, dyrange);
 
 		// for fluid particles（包括inlet）       -----动量方程-----
 		single_step_fluid_eom_dev0(particleNum(), particlesa.btype, particlesa.rho, particlesa.hsml, particlesa.x, particlesa.y, particlesa.c0, particlesa.c\
 			, particlesa.neibNum, particlesa.neiblist, particlesa.bweight, particlesa.iotype, lengthofx, particlesa.wMxijx, particlesa.wMxijy, particlesa.ax, particlesa.ay\
 			, particlesa.m_11, particlesa.m_12, particlesa.m_21, particlesa.m_22, particlesa.press, particlesa.vx, particlesa.vy, particlesa.mass, particlesa.tau11, particlesa.tau12, particlesa.tau21, particlesa.tau22\
-			, particlesa.turb11, particlesa.turb12, particlesa.turb21, particlesa.turb22, particlesa.fintx, particlesa.finty, particlesa.ftype, particlesa.avx, particlesa.avy, particlesa.turbx, particlesa.turby);
+			, particlesa.turb11, particlesa.turb12, particlesa.turb21, particlesa.turb22, particlesa.fintx, particlesa.finty, particlesa.ftype, particlesa.avx, particlesa.avy, particlesa.turbx, particlesa.turby\
+			, xgcell, ygcell, grid_d, celldata, ngridx, ngridy, dxrange, dyrange);
 
 
 		const std::clock_t end = std::clock();
