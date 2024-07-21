@@ -60,7 +60,7 @@ __global__ void singlestep_eos_dev1(unsigned int particleNum, sph::BoundaryType*
 __global__ void singlestep_updateWeight_dev1(unsigned int particleNum, unsigned int* neibNum, double* hsml, unsigned int** neiblist, double* x, double* y\
 											, sph::InoutType* iotype, double lengthofx, double** bweight, double** dbweightx, double** dbweighty);
 
-__global__ void singlestep_updateWeight_dev1_grid(unsigned int particleNum, double* hsml, double* x, double* y\
+__global__ void singlestep_updateWeight_dev1_grid(unsigned int particleNum, unsigned int* neibNum2 , double* hsml, double* x, double* y\
 	, sph::InoutType* iotype, double lengthofx, double** bweight, double** dbweightx, double** dbweighty, int* grid_d\
 	, int* xgcell, int* ygcell, int* celldata, int ngridx, int ngridy, double dxrange, double dyrange);
 
