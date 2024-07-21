@@ -11,8 +11,8 @@
 
 */
 
-#define BlocksNum 32
-#define ThreadNum 32
+#define BlocksNum 64
+#define ThreadNum 256
 
 #define CHECK(call)\
 {\
