@@ -127,6 +127,26 @@ namespace sph {
 		~domain();
 
 	private:
+		//for decreasing malloc process
+		int deviceId;
+		double* dtmin;
+		double* tempa;
+		double* tempb;
+		double* tempc;
+		double* tempd;
+		double* x_max;
+		double* x_min;
+		double* y_max;
+		double* y_min;
+		int* xgcell;//三个数组，分别来存储每个粒子的编号信息
+		int* ygcell;
+		int* celldata;
+		//int* grid_d;
+		double* d_vmax;
+		double* h_vmax;
+		int* lock;
+
+
 		double dp=0;//particle distance
 		double p0=0;
 		unsigned int istep=0;
@@ -956,6 +976,27 @@ namespace sph {
 	//��������solve (���˼·��
 	inline void domain::solve(unsigned int _total)
 	{
+		particlesa.shift2dev(particleNum());
+		cudaGetDevice(&deviceId);
+		cudaMalloc(&dtmin, sizeof(double));
+		tempa = (double*)malloc(sizeof(double));
+		tempb = (double*)malloc(sizeof(double));
+		tempc = (double*)malloc(sizeof(double));
+		tempd = (double*)malloc(sizeof(double));
+		cudaMalloc(&x_max, sizeof(double));
+		cudaMalloc(&x_min, sizeof(double));
+		cudaMalloc(&y_max, sizeof(double));
+		cudaMalloc(&y_min, sizeof(double));
+		cudaMalloc(&xgcell, sizeof(int) * particleNum());
+		cudaMalloc(&ygcell, sizeof(int) * particleNum());
+		cudaMalloc(&celldata, sizeof(int) * particleNum());
+		cudaMalloc(&d_vmax, sizeof(double));
+		h_vmax = (double*)malloc(sizeof(double));
+		cudaMalloc(&lock, sizeof(int));
+		int* lock_h = (int*)malloc(sizeof(int));
+		*lock_h = 0;
+		cudaMemcpy(lock, lock_h, sizeof(int), cudaMemcpyHostToDevice);
+
 		//int deviceId;
 		//cudaGetDevice(&deviceId);
 		//printf("current device is %d\n", deviceId);
@@ -978,7 +1019,8 @@ namespace sph {
 		if (usingProgressbar)
 			std::cout << banner << mid << end;
 		
-		particlesa.shift2dev(particleNum());
+
+
 
 		for (; istep < total; istep++)
 		{			
@@ -1032,6 +1074,18 @@ namespace sph {
 			}
 			time += dt;
 		}
+
+		cudaFree(dtmin);
+		cudaFree(x_max);
+		cudaFree(x_min);
+		cudaFree(y_max);
+		cudaFree(y_min);
+		cudaFree(xgcell);
+		cudaFree(ygcell);
+		cudaFree(celldata);
+		cudaFree(d_vmax);
+		cudaFree(lock);
+
 		++pbar;
 		this->output(istep);
 		if (usingProgressbar) {
@@ -1047,17 +1101,19 @@ namespace sph {
 	{
 		//静态热传导，由于速度为0，求dt时涉及速度加速度的统统不要
 
-		double alpha_pi = 1.0;
-		double* dtmin;
-		cudaMallocManaged(&dtmin, sizeof(double));
-		*dtmin = DBL_MAX;
-
+		//double alpha_pi;
+		//double* dtmin;
+		
+		//*dtmin = 1;
+		*tempa = DBL_MAX;
+		cudaMemcpy(dtmin, tempa, sizeof(double), cudaMemcpyHostToDevice);
 		//改gpu
 		getdt_dev0(particles.size(), dtmin, particlesa.divvel, particlesa.hsml, particlesa.fltype, vmax, particlesa.ax, particlesa.ay);
 		//printf("dtmin=%e\n", *dtmin);
 		//dtmin = std::min(dt00, dt22);		
 		//dtmin = std::min(dtmin, 0.000001);
-		if (*dtmin < 0) {
+		cudaMemcpy(tempa, dtmin, sizeof(double), cudaMemcpyDeviceToHost);
+		if (*tempa < 0) {
 			std::cerr << std::endl << "dt 小于0:  " << dtmin << std::endl;
 			//std::cerr << "dt00:  " << dt00 << std::endl;
 			//std::cerr << "dt11:  " << dt11 << std::endl;
@@ -1065,9 +1121,11 @@ namespace sph {
 			//std::cerr << "dt33:  " << dt33 << std::endl;
 			exit(-1);
 		}
-		alpha_pi = *dtmin;
-		cudaFree(dtmin);
-		return alpha_pi;
+		
+		//cudaMemcpy(tempa, dtmin, sizeof(double), cudaMemcpyDeviceToHost);
+		//alpha_pi = *dtmin;
+		//cudaFree(dtmin);
+		return *tempa;
 
 		//return 0.0000001;
 	}
@@ -1090,31 +1148,48 @@ namespace sph {
 		double x_min = DBL_MAX;
 		double y_max = DBL_MIN;
 		double y_min = DBL_MAX;*/
-		double* x_max;
-		double* x_min;
-		double* y_max;
-		double* y_min;
+		//double* x_max;
+		//double* x_min;
+		//double* y_max;
+		//double* y_min;
 
-		cudaMallocManaged(&x_max, sizeof(double));
-		cudaMallocManaged(&x_min, sizeof(double));
-		cudaMallocManaged(&y_max, sizeof(double));
-		cudaMallocManaged(&y_min, sizeof(double));
+		//cudaMallocManaged(&x_max, sizeof(double));
+		//cudaMallocManaged(&x_min, sizeof(double));
+		//cudaMallocManaged(&y_max, sizeof(double));
+		//cudaMallocManaged(&y_min, sizeof(double));
 
-		*x_max = DBL_MIN;
-		*x_min = DBL_MAX;
-		*y_max = DBL_MIN;
-		*y_min = DBL_MAX;
+		*tempa = DBL_MIN;
+		*tempb = DBL_MAX;
+		*tempc = DBL_MIN;
+		*tempd = DBL_MAX;
+
+		cudaMemcpy(x_max, tempa, sizeof(double), cudaMemcpyHostToDevice);
+		cudaMemcpy(x_min, tempb, sizeof(double), cudaMemcpyHostToDevice);
+		cudaMemcpy(y_max, tempc, sizeof(double), cudaMemcpyHostToDevice);
+		cudaMemcpy(y_min, tempd, sizeof(double), cudaMemcpyHostToDevice);
 
 		//GPU
 		buildNeighb_dev01(particles.size(), particlesa.ux, particlesa.uy, particlesa.x, particlesa.y, x_max, x_min, y_max, y_min);
 
-		*x_max += 5.0 * dp;
-		*x_min -= 5.0 * dp;
-		*y_max += 5.0 * dp;
-		*y_min -= 5.0 * dp;
+		cudaMemcpy(tempa, x_max, sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(tempb, x_min, sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(tempc, y_max, sizeof(double), cudaMemcpyDeviceToHost);
+		cudaMemcpy(tempd, y_min, sizeof(double), cudaMemcpyDeviceToHost);
+
+		*tempa += 5.0 * dp;
+		*tempb -= 5.0 * dp;
+		*tempc += 5.0 * dp;
+		*tempd -= 5.0 * dp;
+
+		cudaMemcpy(x_max, tempa, sizeof(double), cudaMemcpyHostToDevice);
+		cudaMemcpy(x_min, tempb, sizeof(double), cudaMemcpyHostToDevice);
+		cudaMemcpy(y_max, tempc, sizeof(double), cudaMemcpyHostToDevice);
+		cudaMemcpy(y_min, tempd, sizeof(double), cudaMemcpyHostToDevice);
+
+
 		//确定计算域
-		const double dxrange = *x_max - *x_min;
-		const double dyrange = *y_max - *y_min;
+		const double dxrange = *tempa - *tempb;
+		const double dyrange = *tempc - *tempd;
 		//printf("\nallow us to test the range of which:x:%lf and y:%lf\n", dxrange, dyrange);
 
 		const int ntotal = static_cast<int>(particles.size());
@@ -1126,24 +1201,28 @@ namespace sph {
 
 		//math::matrix grid(ngridx, ngridy);//网格编号，使用矩阵来对网格进行编号。（10，8）
 		int* grid_d;
-		cudaMallocManaged(&grid_d, sizeof(int) * ngridx * ngridy);
+		int* grid_h;
+		grid_h = (int*)malloc(sizeof(int) * ngridx * ngridy);
+		cudaMalloc(&grid_d, sizeof(int) * ngridx * ngridy);
 		for (int gridi = 0; gridi < ngridx * ngridy; gridi++) {
-			grid_d[gridi] = 0;
+			grid_h[gridi] = 0;
 		}
-		cudaMemPrefetchAsync(grid_d, sizeof(int) * ngridx * ngridy, deviceId, NULL);
+		cudaMemcpy(grid_d, grid_h, sizeof(int) * ngridx * ngridy, cudaMemcpyHostToDevice);
+		//cudaMemPrefetchAsync(grid_d, sizeof(int) * ngridx * ngridy, deviceId, NULL);
 
 		//int* xgcell = new int[ntotal];//三个数组，分别来存储每个粒子的编号信息
 		//int* ygcell = new int[ntotal];
 		//int* celldata = new int[ntotal];
-		int* xgcell ;//三个数组，分别来存储每个粒子的编号信息
-		int* ygcell ;
-		int* celldata ;
-		cudaMallocManaged(&xgcell, sizeof(int) * ntotal);
-		cudaMallocManaged(&ygcell, sizeof(int) * ntotal);
-		cudaMallocManaged(&celldata, sizeof(int) * ntotal);
-		cudaMemPrefetchAsync(xgcell, sizeof(int) * ntotal, deviceId, NULL);
-		cudaMemPrefetchAsync(ygcell, sizeof(int) * ntotal, deviceId, NULL);
-		cudaMemPrefetchAsync(celldata, sizeof(int) * ntotal, deviceId, NULL);
+
+		//int* xgcell ;//三个数组，分别来存储每个粒子的编号信息
+		//int* ygcell ;
+		//int* celldata ;
+		//cudaMallocManaged(&xgcell, sizeof(int) * ntotal);
+		//cudaMallocManaged(&ygcell, sizeof(int) * ntotal);
+		//cudaMallocManaged(&celldata, sizeof(int) * ntotal);
+		//cudaMemPrefetchAsync(xgcell, sizeof(int) * ntotal, deviceId, NULL);
+		//cudaMemPrefetchAsync(ygcell, sizeof(int) * ntotal, deviceId, NULL);
+		//cudaMemPrefetchAsync(celldata, sizeof(int) * ntotal, deviceId, NULL);
 
 
 		//GPU
@@ -1151,17 +1230,17 @@ namespace sph {
 			printf("")
 		}*/
 		buildNeighb_dev02(particles.size(), particlesa.x, particlesa.y, particlesa.neiblist, particlesa.neibNum\
-			, ngridx, ngridy, dxrange, dyrange, *x_min, *y_min\
-			, xgcell, ygcell, celldata, grid_d, particlesa.hsml, particlesa.idx, particlesa.iotype, lengthofx);
+			, ngridx, ngridy, dxrange, dyrange, *tempb, *tempd\
+			, xgcell, ygcell, celldata, grid_d, particlesa.hsml, particlesa.idx, particlesa.iotype, lengthofx, lock);
 
-		cudaFree(x_max);
-		cudaFree(x_min);
-		cudaFree(y_max);
-		cudaFree(y_min);
+		//cudaFree(x_max);
+		//cudaFree(x_min);
+		//cudaFree(y_max);
+		//cudaFree(y_min);
 		cudaFree(grid_d);
-		cudaFree(xgcell);
-		cudaFree(ygcell);
-		cudaFree(celldata);
+		//cudaFree(xgcell);
+		//cudaFree(ygcell);
+		//cudaFree(celldata);
 		const std::clock_t end = std::clock();
 		//this->debugNeib(1240);
 		//this->debugNeib(1239);
@@ -1798,17 +1877,19 @@ namespace sph {
 		this->single_step_temperature_gaojie();
 		vmax = 0;
 
-		double* d_vmax;
-		cudaMallocManaged(&d_vmax, sizeof(double));
-		*d_vmax = 0;
+		//double* d_vmax;
+		//cudaMallocManaged(&d_vmax, sizeof(double));
+		*h_vmax = 0;
+		cudaMemcpy(d_vmax, h_vmax, sizeof(double), cudaMemcpyHostToDevice);
 
 		run_half2_dev0(particleNum(), particlesa.half_x, particlesa.half_y, particlesa.half_vx, particlesa.half_vy, particlesa.half_rho, particlesa.half_temperature\
 			, particlesa.x, particlesa.y, particlesa.vx, particlesa.vy, particlesa.rho, particlesa.temperature\
 			, particlesa.drho, particlesa.ax, particlesa.ay, particlesa.vol, particlesa.mass\
 			, particlesa.btype, particlesa.ftype, particlesa.temperature_t, dt2, d_vmax);
 
-		vmax = *d_vmax;
-		cudaFree(d_vmax);
+		cudaMemcpy(h_vmax, d_vmax, sizeof(double), cudaMemcpyDeviceToHost);
+		vmax = *h_vmax;
+		//cudaFree(d_vmax);
 
 		//-----------corrector--------------
 		//this->single_step();

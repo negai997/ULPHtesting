@@ -280,7 +280,7 @@ namespace sph {
 		cudaMallocManaged(&rho_min, idp * sizeof(double));
 		cudaMallocManaged(&vol, idp * sizeof(double));
 		cudaMallocManaged(&c, idp * sizeof(double));
-		cudaMallocManaged(&c0, idp * sizeof(double));
+		cudaMallocManaged(&c0, idp * sizeof(double));//可合并
 		cudaMallocManaged(&visco, idp * sizeof(double));
 		cudaMallocManaged(&mass, idp * sizeof(double));
 		cudaMallocManaged(&hsml, idp * sizeof(double));

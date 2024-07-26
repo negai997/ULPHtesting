@@ -190,7 +190,7 @@ __global__ void getdt_dev(unsigned int particleNum, double* dtmin, double* divve
 		//dt33 = std::min(dt33, dt3);
 
 	}
-	__syncthreads();
+	//__syncthreads();
 	atomicMinDouble(dtmin, min_d(dt00, dt22));
 }
 
@@ -256,7 +256,7 @@ __global__ void buildNeighb_dev1(unsigned int particleNum,double*ux,double*uy,do
 		y_max = y_max < y ? y : y_max;
 		y_min = y_min > y ? y : y_min;
 	}
-	__syncthreads();
+	//__syncthreads();
 	atomicMaxDouble(X_max, x_max);
 	atomicMaxDouble(Y_max, y_max);
 	atomicMinDouble(X_min, x_min);
@@ -1183,17 +1183,17 @@ __global__ void run_shifttype_divc_dev1(unsigned int particleNum, sph::BoundaryT
 		for (int j = 0; j < neibNum[i]; j++)
 		{
 			const int jj = neiblist[i][j];
-			const double mhsml = (hsml + Hsml[jj]) * 0.5;
-			const double conc_ij = shift_c[jj] - conc;
+			//const double mhsml = (hsml + Hsml[jj]) * 0.5;
+			//const double conc_ij = shift_c[jj] - conc;
 
-			shift_x += conc_ij * mass[jj] / rho[jj] * dbweightx[i][j];
-			shift_y += conc_ij * mass[jj] / rho[jj] * dbweighty[i][j];
+			shift_x += (shift_c[jj] - conc) * mass[jj] / rho[jj] * dbweightx[i][j];
+			shift_y += (shift_c[jj] - conc) * mass[jj] / rho[jj] * dbweighty[i][j];
 		}
-		const double vx = Vx[i];
+		/*const double vx = Vx[i];
 		const double vy = Vy[i];
-		const double vel = sqrt(vx * vx + vy * vy);
-		shift_x *= -2.0 * dp * vel * dt * shiftingCoe;
-		shift_y *= -2.0 * dp * vel * dt * shiftingCoe;
+		const double vel = sqrt(Vx[i] * Vx[i] + Vy[i] * Vy[i]);*/
+		shift_x *= -2.0 * dp * sqrt(Vx[i] * Vx[i] + Vy[i] * Vy[i]) * dt * shiftingCoe;
+		shift_y *= -2.0 * dp * sqrt(Vx[i] * Vx[i] + Vy[i] * Vy[i]) * dt * shiftingCoe;
 
 		Shift_x[i] = shift_x;
 		Shift_y[i] = shift_y;
@@ -1203,9 +1203,9 @@ __global__ void run_shifttype_divc_dev1(unsigned int particleNum, sph::BoundaryT
 		ux[i] += shift_x;
 		uy[i] += shift_y;
 
-		const double Ux = ux[i];
-		const double Uy = uy[i];
-		const double disp = sqrt(Ux * Ux + Uy * Uy);
+		/*const double Ux = ux[i];
+		const double Uy = uy[i];*/
+		const double disp = sqrt(ux[i] * ux[i] + uy[i] * uy[i]);
 
 		for (int s = 0; s < 32; s++) {
 			if ((blockDim.x * blockIdx.x + threadIdx.x) % 32 != s)
@@ -1356,17 +1356,17 @@ void buildNeighb_dev01(unsigned int particleNum, double* ux, double* uy, double*
 
 void buildNeighb_dev02(unsigned int particleNum, double* X, double* Y, unsigned int** neiblist, unsigned int* neibNum\
 	, const int ngridx, const int ngridy, const double dxrange, const double dyrange, double x_min, double y_min\
-	, int* xgcell, int* ygcell, int* celldata, int* grid_d, const double* Hsml, unsigned int* idx, sph::InoutType* iotype, double lengthofx) {
+	, int* xgcell, int* ygcell, int* celldata, int* grid_d, const double* Hsml, unsigned int* idx, sph::InoutType* iotype, double lengthofx, int* lock) {
 	//目前网格法无法并行，暂不考虑其并行方法，但并行化建议使用全搜索法
-	int* lock;
-	cudaMallocManaged(&lock,sizeof(int));
-	*lock = 0;
+	//int* lock;
+	//cudaMallocManaged(&lock,sizeof(int));
+	//*lock = 0;
 	buildNeighb_dev2 << <blocksNum, threadNum >> > ( particleNum, X, Y, neiblist, neibNum, ngridx, ngridy, dxrange, dyrange, x_min, y_min, xgcell, ygcell, celldata, grid_d, lock);
-	CHECK(cudaDeviceSynchronize());
+	//CHECK(cudaDeviceSynchronize());
 	buildNeighb_dev3 << <blocksNum, threadNum >> > (particleNum, X, Y, neiblist, neibNum, Hsml, ngridx, ngridy, dxrange, dyrange, idx, iotype, xgcell, ygcell, celldata, grid_d, lengthofx);
 	CHECK(cudaDeviceSynchronize());
 	//printf("particle_1's neighberNum is %d\n", neibNum[0]);
-	cudaFree(lock);
+	//cudaFree(lock);
 
 }
 
@@ -1399,7 +1399,7 @@ void singlestep_updateWeight_dev0(unsigned int particleNum, unsigned int* neibNu
 									, sph::InoutType* iotype, double lengthofx, double** bweight, double** dbweightx, double** dbweighty) {
 
 	singlestep_updateWeight_dev1<<<blocksNum, threadNum >>>(particleNum, neibNum, hsml, neiblist, x, y, iotype, lengthofx, bweight, dbweightx, dbweighty);
-	CHECK(cudaDeviceSynchronize());
+	//CHECK(cudaDeviceSynchronize());
 }
 
 void singlestep_boundryPNV_dev0(unsigned int particleNum, sph::BoundaryType* btype, unsigned int* neibNum, unsigned int** neiblist, sph::FixType* ftype, double* mass\
@@ -2278,7 +2278,7 @@ void single_temp_boundary_dev0(unsigned int particleNum, sph::BoundaryType* btyp
 	, double* press, double** bweight, double* vx, double* vy, double* Vcc) {
 	single_temp_boundary_dev1<<<blocksNum, threadNum >>>(particleNum, btype, neibNum, neiblist, ftype, mass, rho\
 		, press, bweight, vx, vy, Vcc);
-	CHECK(cudaDeviceSynchronize());
+	//CHECK(cudaDeviceSynchronize());
 }
 
 void single_temp_shapematrix_dev0(unsigned int particleNum, sph::BoundaryType* btype, double* rho, double* Hsml, double* x, double* y, unsigned int* neibNum, unsigned int** neiblist\
@@ -2289,7 +2289,7 @@ void single_temp_shapematrix_dev0(unsigned int particleNum, sph::BoundaryType* b
 		, bweight, iotype, lengthofx, mass, m_11, m_12, m_21, m_22, M_11\
 		, M_12, M_13, M_14, M_15, M_21, M_22, M_23, M_24, M_25\
 		, M_31, M_32, M_33, M_34, M_35, M_51, M_52, M_53, M_54, M_55);
-	CHECK(cudaDeviceSynchronize());
+	//CHECK(cudaDeviceSynchronize());
 }
 
 void single_temp_bdvisco_dev0(unsigned int particleNum, sph::BoundaryType* btype, double* rho, double* Hsml, double* x, double* y, unsigned int* neibNum, unsigned int** neiblist\
@@ -2300,7 +2300,7 @@ void single_temp_bdvisco_dev0(unsigned int particleNum, sph::BoundaryType* btype
 		, bweight, iotype, lengthofx, wMxijx, wMxijy, m_11, m_12, m_21, m_22\
 		, press, vx, vy, mass, Tau11, Tau12, Tau21, Tau22, fltype, dp\
 		, C_s, turb11, turb12, turb21, turb22);
-	CHECK(cudaDeviceSynchronize());
+	//CHECK(cudaDeviceSynchronize());
 }
 
 void single_step_fluid_dev0(unsigned int particleNum, sph::BoundaryType* btype, double* rho, double* Hsml, double* x, double* y, unsigned int* neibNum, unsigned int** neiblist\
@@ -2313,7 +2313,7 @@ void single_step_fluid_dev0(unsigned int particleNum, sph::BoundaryType* btype, 
 		, press, vx, vy, mass, tau11, tau12, tau21, tau22, fltype, dp\
 		, C_s, turb11, turb12, turb21, turb22, temperature, M_31, M_32, M_33, M_34, M_35\
 		, M_51, M_52, M_53, M_54, M_55, divvel, vort, ftype, drho, temperature_x, temperature_t);
-	CHECK(cudaDeviceSynchronize());
+	//CHECK(cudaDeviceSynchronize());
 }
 
 void single_step_fluid_eom_dev0(unsigned int particleNum, sph::BoundaryType* btype, double* rho, double* Hsml, double* x, double* y, double* C0, double* C\
