@@ -14,6 +14,9 @@
 #define blocksNum 64
 #define threadNum 256
 
+#define wMxijx(i,j) (m_11[i] * dx + m_12[i] * dy) * bweight[i][j]
+#define wMxijy(i,j) (m_21[i] * dx + m_22[i] * dy) * bweight[i][j]
+
 #define CHECK(call)\
 {\
 	const cudaError_t error = call;\
@@ -583,8 +586,8 @@ __global__ void singlestep_updateWeight_dev1(unsigned int particleNum, unsigned 
 			const double q = r / mhsml;
 			if (q > 3.0) {
 				bweight[i][j] = 0;
-				dbweightx[i][j] = 0;
-				dbweighty[i][j] = 0;
+				//dbweightx[i][j] = 0;
+				//dbweighty[i][j] = 0;
 				continue;
 			}
 
@@ -593,10 +596,10 @@ __global__ void singlestep_updateWeight_dev1(unsigned int particleNum, unsigned 
 
 			sum += dev_bweight;
 			bweight[i][j] = dev_bweight;
-			const double factor = fac * expf(-q * q) * (-2.0 / mhsml / mhsml);
+			//const double factor = fac * expf(-q * q) * (-2.0 / mhsml / mhsml);
 
-			dbweightx[i][j] = factor * dx;
-			dbweighty[i][j] = factor * dy;
+			//dbweightx[i][j] = factor * dx;
+			//dbweighty[i][j] = factor * dy;
 		}
 
 		for (int j = 0; j < neibNum[i]; j++)
@@ -715,25 +718,25 @@ __global__ void singlestep_boundaryVisc_dev1(unsigned int particleNum, sph::Boun
 		const double yi = y[i];
 
 		//--------wMxij-------
-		for (int j = 0; j < neibNum[i]; j++)
-		{
-			const int jj = neiblist[i][j];
-			if (bweight[i][j] < 0.000000001) continue;
-			const double xj = x[jj];
-			const double yj = y[jj];
-			double dx = xj - xi;
-			double dy = yj - yi;
-			if (iotype[i] == sph::InoutType::Inlet && iotype[jj] == sph::InoutType::Outlet)
-			{
-				dx = x[jj] - x[i] - lengthofx;//xi(1)
-			}
-			if (iotype[i] == sph::InoutType::Outlet && iotype[jj] == sph::InoutType::Inlet)
-			{
-				dx = x[jj] - x[i] + lengthofx;//xi(1)
-			}
-			wMxijx[i][j] = (m_11[i] * dx + m_12[i] * dy) * bweight[i][j];
-			wMxijy[i][j] = (m_21[i] * dx + m_22[i] * dy) * bweight[i][j];
-		}
+		//for (int j = 0; j < neibNum[i]; j++)
+		//{
+		//	const int jj = neiblist[i][j];
+		//	if (bweight[i][j] < 0.000000001) continue;
+		//	const double xj = x[jj];
+		//	const double yj = y[jj];
+		//	double dx = xj - xi;
+		//	double dy = yj - yi;
+		//	if (iotype[i] == sph::InoutType::Inlet && iotype[jj] == sph::InoutType::Outlet)
+		//	{
+		//		dx = x[jj] - x[i] - lengthofx;//xi(1)
+		//	}
+		//	if (iotype[i] == sph::InoutType::Outlet && iotype[jj] == sph::InoutType::Inlet)
+		//	{
+		//		dx = x[jj] - x[i] + lengthofx;//xi(1)
+		//	}
+		//	wMxijx(i, j) = (m_11[i] * dx + m_12[i] * dy) * bweight[i][j];
+		//	wMxijy(i, j) = (m_21[i] * dx + m_22[i] * dy) * bweight[i][j];
+		//}
 		//if (particlesa.btype[i] != sph::BoundaryType::Boundary) continue;
 
 		double epsilon_2_11 = 0;
@@ -774,10 +777,10 @@ __global__ void singlestep_boundaryVisc_dev1(unsigned int particleNum, sph::Boun
 			const double dvx = vx[jj] - vx[i];
 			const double dvy = vy[jj] - vy[i];
 			const double massj = mass[jj];
-			epsilon_2_11 += dvx * wMxijx[i][j] * massj / rho_j;//du/dx
-			epsilon_2_12 += dvx * wMxijy[i][j] * massj / rho_j;//du/dy
-			epsilon_2_21 += dvy * wMxijx[i][j] * massj / rho_j;//dv/dx
-			epsilon_2_22 += dvy * wMxijy[i][j] * massj / rho_j;//dv/dy			
+			epsilon_2_11 += dvx * wMxijx(i, j) * massj / rho_j;//du/dx
+			epsilon_2_12 += dvx * wMxijy(i, j) * massj / rho_j;//du/dy
+			epsilon_2_21 += dvy * wMxijx(i, j) * massj / rho_j;//dv/dx
+			epsilon_2_22 += dvy * wMxijy(i, j) * massj / rho_j;//dv/dy			
 		}//end circle j
 
 		 //epsilon_second= -1./3.* epsilon_3;//*��λ����
@@ -849,27 +852,27 @@ __global__ void singlestep_fluidVisc_dev1(unsigned int particleNum, sph::Boundar
 		const double p_i = press[i];
 
 		//--------wMxij-------
-		for (int j = 0; j < neibNum[i]; j++)
-		{
-			const int jj = neiblist[i][j];
-			if (bweight[i][j] < 0.000000001) continue;
-			const double xj = x[jj];
-			const double yj = y[jj];
-			double dx = xj - xi;
-			double dy = yj - yi;
-			//周期边界
-			if (iotype[i] == sph::InoutType::Inlet && iotype[jj] == sph::InoutType::Outlet)
-			{
-				dx = x[jj] - x[i] - lengthofx;//xi(1)
-			}
-			if (iotype[i] == sph::InoutType::Outlet && iotype[jj] == sph::InoutType::Inlet)
-			{
-				dx = x[jj] - x[i] + lengthofx;;//xi(1)
-			}
+		//for (int j = 0; j < neibNum[i]; j++)
+		//{
+		//	const int jj = neiblist[i][j];
+		//	if (bweight[i][j] < 0.000000001) continue;
+		//	const double xj = x[jj];
+		//	const double yj = y[jj];
+		//	double dx = xj - xi;
+		//	double dy = yj - yi;
+		//	//周期边界
+		//	if (iotype[i] == sph::InoutType::Inlet && iotype[jj] == sph::InoutType::Outlet)
+		//	{
+		//		dx = x[jj] - x[i] - lengthofx;//xi(1)
+		//	}
+		//	if (iotype[i] == sph::InoutType::Outlet && iotype[jj] == sph::InoutType::Inlet)
+		//	{
+		//		dx = x[jj] - x[i] + lengthofx;;//xi(1)
+		//	}
 
-			wMxijx[i][j] = (m_11[i] * dx + m_12[i] * dy) * bweight[i][j];
-			wMxijy[i][j] = (m_21[i] * dx + m_22[i] * dy) * bweight[i][j];
-		}
+		//	wMxijx(i, j) = (m_11[i] * dx + m_12[i] * dy) * bweight[i][j];
+		//	wMxijy(i, j) = (m_21[i] * dx + m_22[i] * dy) * bweight[i][j];
+		//}
 
 		for (int j = 0; j < neibNum[i]; j++)
 		{
@@ -920,10 +923,10 @@ __global__ void singlestep_fluidVisc_dev1(unsigned int particleNum, sph::Boundar
 			//	reply += -0.01 * c0 * c0 * ch * f_eta * dy / r2 * particlesa.mass[i];
 			//}
 			//----------internal force--------								
-			epsilon_2_11 += dvx * wMxijx[i][j] * massj / rho_j;//du/dx
-			epsilon_2_12 += dvx * wMxijy[i][j] * massj / rho_j;//du/dy
-			epsilon_2_21 += dvy * wMxijx[i][j] * massj / rho_j;//dv/dx
-			epsilon_2_22 += dvy * wMxijy[i][j] * massj / rho_j;//dv/dy				
+			epsilon_2_11 += dvx * wMxijx(i, j) * massj / rho_j;//du/dx
+			epsilon_2_12 += dvx * wMxijy(i, j) * massj / rho_j;//du/dy
+			epsilon_2_21 += dvy * wMxijx(i, j) * massj / rho_j;//dv/dx
+			epsilon_2_22 += dvy * wMxijy(i, j) * massj / rho_j;//dv/dy				
 		}//end circle j
 		//-----------------------------速度散度			
 		divvel[i] = epsilon_2_11 + epsilon_2_22;//弱可压缩，散度应该不会很大		
@@ -1036,8 +1039,8 @@ __global__ void singlestep_eom_dev1(unsigned int particleNum, sph::BoundaryType*
 			const double r2 = dx * dx + dy * dy;
 			const double rho_j = rho[jj];
 			const double massj = mass[jj];
-			const double wMxijxV_iix = wMxijx[i][j] * massj / rho_j;
-			const double wMxijyV_iiy = wMxijy[i][j] * massj / rho_j;
+			const double wMxijxV_iix = wMxijx(i, j) * massj / rho_j;
+			const double wMxijyV_iiy = wMxijy(i, j) * massj / rho_j;
 			//const double wMxijxV_jjx = (jj)->wMxijx[j] * massj / rho_j;//(jj)->wMxijx[j] 可能错了
 			//const double wMxijyV_jjy = (jj)->wMxijy[j] * massj / rho_j;
 			const double wMxijxV_jjx = (m_11[jj] * dx + m_12[jj] * dy) * bweight[i][j] * massj / rho_j;
@@ -1096,8 +1099,8 @@ __global__ void singlestep_eom_dev1(unsigned int particleNum, sph::BoundaryType*
 				piv = (0.5 * muv - 1.0 * mc) * muv / mrho;
 				//piv = (0.5 * muv) * muv / mrho;//只有beta项，加速度会一直很大，停不下来，穿透。
 			}
-			avx += -massj * piv * wMxijx[i][j];
-			avy += -massj * piv * wMxijy[i][j];
+			avx += -massj * piv * wMxijx(i, j);
+			avy += -massj * piv * wMxijy(i, j);
 		}
 
 		fintx[i] = temp_sigemax / rho_i;
@@ -1178,16 +1181,38 @@ __global__ void run_shifttype_divc_dev1(unsigned int particleNum, sph::BoundaryT
 		double shift_x = 0;
 		double shift_y = 0;
 
-
+		double dbweightx0;
+		double dbweighty0;
 
 		for (int j = 0; j < neibNum[i]; j++)
 		{
 			const int jj = neiblist[i][j];
 			//const double mhsml = (hsml + Hsml[jj]) * 0.5;
 			//const double conc_ij = shift_c[jj] - conc;
+			
+			//dbweight
 
-			shift_x += (shift_c[jj] - conc) * mass[jj] / rho[jj] * dbweightx[i][j];
-			shift_y += (shift_c[jj] - conc) * mass[jj] / rho[jj] * dbweighty[i][j];
+			double dx = x[i] - x[jj];
+			double dy = y[i] - y[jj];
+			const double r = sqrt(dx * dx + dy * dy); //q�Ĵ�����ͬ�������һ��mhsml(662-664)
+			const double hsmlj = Hsml[jj];//hsmlΪhsml(i)��hsmljΪhsml(k)
+			const double mhsml = (hsml + hsmlj) * 0.5;
+			const double q = r / mhsml;
+			if (q > 3.0) {
+				dbweightx0 = 0;
+				dbweighty0 = 0;
+				continue;
+			}
+
+			const double fac = 1.0 / (3.14159265358979323846 * mhsml * mhsml) / (1.0 - 10.0 * expf(-9));
+
+			const double factor = fac * expf(-q * q) * (-2.0 / mhsml / mhsml);
+
+			dbweightx0 = factor * dx;
+			dbweighty0 = factor * dy;
+			//dbweight
+			shift_x += (shift_c[jj] - conc) * mass[jj] / rho[jj] * dbweightx0;
+			shift_y += (shift_c[jj] - conc) * mass[jj] / rho[jj] * dbweighty0;
 		}
 		/*const double vx = Vx[i];
 		const double vy = Vy[i];
@@ -1244,17 +1269,41 @@ __global__ void run_shifttype_velc_dev1(unsigned int particleNum, sph::BoundaryT
 		double shift_x = 0;
 		double shift_y = 0;
 
+		double dbweightx0;
+		double dbweighty0;
+
 		for (int j = 0; j < neibNum[i]; j++)
 		{
 			const int jj = neiblist[i][j];
+			//dbweight
+
+			double dx = x[i] - x[jj];
+			double dy = y[i] - y[jj];
+			const double r = sqrt(dx * dx + dy * dy); //q�Ĵ�����ͬ�������һ��mhsml(662-664)
+			const double hsmlj = Hsml[jj];//hsmlΪhsml(i)��hsmljΪhsml(k)
+			const double mhsml = (hsml + hsmlj) * 0.5;
+			const double q = r / mhsml;
+			if (q > 3.0) {
+				dbweightx0 = 0;
+				dbweighty0 = 0;
+				continue;
+			}
+
+			const double fac = 1.0 / (3.14159265358979323846 * mhsml * mhsml) / (1.0 - 10.0 * expf(-9));
+
+			const double factor = fac * expf(-q * q) * (-2.0 / mhsml / mhsml);
+
+			dbweightx0 = factor * dx;
+			dbweighty0 = factor * dy;
+			//dbweight
 			const double frac = bweight[i][j] / bweightdx;
 			const double head = 1.0 + 0.2 * pow(frac, 4);
 			const double rho_j = rho[jj];
 			const double rho_ij = rho_i + rho_j;
 			const double mass_j = mass[jj];
 
-			shift_x += head * dbweightx[i][j] * mass_j / rho_ij;
-			shift_y += head * dbweighty[i][j] * mass_j / rho_ij;
+			shift_x += head * dbweightx0 * mass_j / rho_ij;
+			shift_y += head * dbweighty0 * mass_j / rho_ij;
 		}
 		const double vx = Vx[i];
 		const double vy = Vy[i];
@@ -1766,26 +1815,27 @@ __global__ void single_temp_bdvisco_dev1(unsigned int particleNum, sph::Boundary
 		const double yi = y[i];
 
 		//--------wMxij-------
-		for (int j = 0; j < neibNum[i]; j++)
-		{
-			const int jj = neiblist[i][j];
-			if (bweight[i][j] < 0.000000001) continue;
-			const double xj = x[jj];
-			const double yj = y[jj];
-			double dx = xj - xi;
-			double dy = yj - yi;
-			if (iotype[i] == sph::InoutType::Inlet && iotype[jj] == sph::InoutType::Outlet)
-			{
-				dx = x[jj] - x[i] - lengthofx;//xi(1)
-			}
-			if (iotype[i] == sph::InoutType::Outlet && iotype[jj] == sph::InoutType::Inlet)
-			{
-				dx = x[jj] - x[i] + lengthofx;//xi(1)
-			}
+		//for (int j = 0; j < neibNum[i]; j++)
+		//{
+		//	const int jj = neiblist[i][j];
+		//	if (bweight[i][j] < 0.000000001) continue;
+		//	const double xj = x[jj];
+		//	const double yj = y[jj];
+		//	double dx = xj - xi;
+		//	double dy = yj - yi;
+		//	if (iotype[i] == sph::InoutType::Inlet && iotype[jj] == sph::InoutType::Outlet)
+		//	{
+		//		dx = x[jj] - x[i] - lengthofx;//xi(1)
+		//	}
+		//	if (iotype[i] == sph::InoutType::Outlet && iotype[jj] == sph::InoutType::Inlet)
+		//	{
+		//		dx = x[jj] - x[i] + lengthofx;//xi(1)
+		//	}
 
-			wMxijx[i][j] = (m_11[i] * dx + m_12[i] * dy) * bweight[i][j]; //m_12[i]可能等于0
-			wMxijy[i][j] = (m_21[i] * dx + m_22[i] * dy) * bweight[i][j];
-		}
+
+		//	//wMxijx[i][j] = (m_11[i] * dx + m_12[i] * dy) * bweight[i][j]; //m_12[i]可能等于0
+		//	//wMxijy[i][j] = (m_21[i] * dx + m_22[i] * dy) * bweight[i][j];
+		//}
 		//if (btype[i] != sph::BoundaryType::Boundary) continue;
 
 		double epsilon_2_11 = 0;
@@ -1837,21 +1887,21 @@ __global__ void single_temp_bdvisco_dev1(unsigned int particleNum, sph::Boundary
 			double epsilon_dot12 = 0;
 			double epsilon_dot21 = 0;
 			double epsilon_dot22 = 0;
-			double tau11 = 0;
-			double tau12 = 0;
-			double tau21 = 0;
-			double tau22 = 0;
-			double temp_ik11 = 0;
-			double temp_ik12 = 0;
-			double temp_ik21 = 0;
-			double temp_ik22 = 0;
+			//double tau11 = 0;
+			//double tau12 = 0;
+			//double tau21 = 0;
+			//double tau22 = 0;
+			//double temp_ik11 = 0;
+			//double temp_ik12 = 0;
+			//double temp_ik21 = 0;
+			//double temp_ik22 = 0;
 
-			const double A_1 = dvx * wMxijx[i][j] + dvy * wMxijy[i][j];
+			const double A_1 = dvx * wMxijx(i, j) + dvy * wMxijx(i, j);
 
-			epsilon_2_11 += dvx * wMxijx[i][j] * massj / rho_j;//du/dx
-			epsilon_2_12 += dvx * wMxijy[i][j] * massj / rho_j;//du/dy
-			epsilon_2_21 += dvy * wMxijx[i][j] * massj / rho_j;//dv/dx
-			epsilon_2_22 += dvy * wMxijy[i][j] * massj / rho_j;//dv/dy			
+			epsilon_2_11 += dvx * wMxijx(i, j) * massj / rho_j;//du/dx
+			epsilon_2_12 += dvx * wMxijx(i, j) * massj / rho_j;//du/dy
+			epsilon_2_21 += dvy * wMxijx(i, j) * massj / rho_j;//dv/dx
+			epsilon_2_22 += dvy * wMxijx(i, j) * massj / rho_j;//dv/dy			
 		}//end circle j
 
 		 //epsilon_second= -1./3.* epsilon_3;//*��λ����
@@ -1953,27 +2003,27 @@ __global__ void single_step_fluid_dev1(unsigned int particleNum, sph::BoundaryTy
 #pragma omp parallel for schedule (guided)
 #endif
 		//--------wMxij-------
-		for (int j = 0; j < neibNum[i]; j++)
-		{
-			const int jj = neiblist[i][j];
-			if (bweight[i][j] < 0.000000001) continue;
-			const double xj = x[jj];
-			const double yj = y[jj];
-			double dx = xj - xi;
-			double dy = yj - yi;
-			//周期边界
-			if (iotype[i] == sph::InoutType::Inlet && iotype[jj] == sph::InoutType::Outlet)
-			{
-				dx = x[jj] - x[i] - lengthofx;//xi(1)
-			}
-			if (iotype[i] == sph::InoutType::Outlet && iotype[jj] == sph::InoutType::Inlet)
-			{
-				dx = x[jj] - x[i] + lengthofx;;//xi(1)
-			}
+		//for (int j = 0; j < neibNum[i]; j++)
+		//{
+		//	const int jj = neiblist[i][j];
+		//	if (bweight[i][j] < 0.000000001) continue;
+		//	const double xj = x[jj];
+		//	const double yj = y[jj];
+		//	double dx = xj - xi;
+		//	double dy = yj - yi;
+		//	//周期边界
+		//	if (iotype[i] == sph::InoutType::Inlet && iotype[jj] == sph::InoutType::Outlet)
+		//	{
+		//		dx = x[jj] - x[i] - lengthofx;//xi(1)
+		//	}
+		//	if (iotype[i] == sph::InoutType::Outlet && iotype[jj] == sph::InoutType::Inlet)
+		//	{
+		//		dx = x[jj] - x[i] + lengthofx;;//xi(1)
+		//	}
 
-			wMxijx[i][j] = (m_11[i] * dx + m_12[i] * dy) * bweight[i][j];
-			wMxijy[i][j] = (m_21[i] * dx + m_22[i] * dy) * bweight[i][j];
-		}
+		//	wMxijx(i, j) = (m_11[i] * dx + m_12[i] * dy) * bweight[i][j];
+		//	wMxijy(i, j) = (m_21[i] * dx + m_22[i] * dy) * bweight[i][j];
+		//}
 
 
 		for (int j = 0; j < neibNum[i]; j++)
@@ -2036,10 +2086,10 @@ __global__ void single_step_fluid_dev1(unsigned int particleNum, sph::BoundaryTy
 			//const double A_1 = dvx * wMxijx[i][j] + dvy * wMxijy[i][j];
 
 			//速度算子：2*2的张量
-			epsilon_2_11 += dvx * wMxijx[i][j] * massj / rho_j;//du/dx
-			epsilon_2_12 += dvx * wMxijy[i][j] * massj / rho_j;//du/dy
-			epsilon_2_21 += dvy * wMxijx[i][j] * massj / rho_j;//dv/dx
-			epsilon_2_22 += dvy * wMxijy[i][j] * massj / rho_j;//dv/dy  				
+			epsilon_2_11 += dvx * wMxijx(i, j) * massj / rho_j;//du/dx
+			epsilon_2_12 += dvx * wMxijy(i, j) * massj / rho_j;//du/dy
+			epsilon_2_21 += dvy * wMxijx(i, j) * massj / rho_j;//dv/dx
+			epsilon_2_22 += dvy * wMxijy(i, j) * massj / rho_j;//dv/dy  				
 		}	//end circle j
 		//---速度散度			
 		divvel[i] = epsilon_2_11 + epsilon_2_22;//弱可压缩，散度应该不会很大
@@ -2181,8 +2231,8 @@ __global__ void single_step_fluid_eom_dev1(unsigned int particleNum, sph::Bounda
 			//wMxijx[i][j] = (m_11[i] * dx + m_12[i] * dy) * bweight[i][j];
 			//wMxijy[i][j] = (m_21[i] * dx + m_22[i] * dy) * bweight[i][j];
 
-			const double wMxijxV_iix = wMxijx[i][j] * massj / rho_j;
-			const double wMxijyV_iiy = wMxijy[i][j] * massj / rho_j;
+			const double wMxijxV_iix = wMxijx(i, j) * massj / rho_j;
+			const double wMxijyV_iiy = wMxijy(i, j) * massj / rho_j;
 			//const double wMxijxV_jjx = (jj)->wMxijx[j] * massj / rho_j;//(jj)->wMxijx[j] 可能错了
 			//const double wMxijyV_jjy = (jj)->wMxijy[j] * massj / rho_j;
 			const double wMxijxV_jjx = (m_11[jj] * dx + m_12[jj] * dy) * bweight[i][j] * massj / rho_j;
@@ -2243,8 +2293,8 @@ __global__ void single_step_fluid_eom_dev1(unsigned int particleNum, sph::Bounda
 				//piv = (0.5 * muv) * muv / mrho;//只有beta项，加速度会一直很大，停不下来，穿透。
 			}
 			//人工黏性项，好像过大
-			avx += -massj * piv * wMxijx[i][j];
-			avy += -massj * piv * wMxijy[i][j];
+			avx += -massj * piv * wMxijx(i, j);
+			avy += -massj * piv * wMxijy(i, j);
 		}
 
 		fintx[i] = temp_sigemax / rho_i;//不对

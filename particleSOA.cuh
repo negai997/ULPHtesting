@@ -308,22 +308,22 @@ namespace sph {
 		for (int i = 0; i < idp; i++) {
 			cudaMallocManaged(&bweight[i], MAX_NEIB * sizeof(double));
 		}
-		cudaMallocManaged(&dbweightx, idp * sizeof(double*));
-		for (int i = 0; i < idp; i++) {
-			cudaMallocManaged(&dbweightx[i], MAX_NEIB * sizeof(double));
-		}
-		cudaMallocManaged(&dbweighty, idp * sizeof(double*));
-		for (int i = 0; i < idp; i++) {
-			cudaMallocManaged(&dbweighty[i], MAX_NEIB * sizeof(double));
-		}
-		cudaMallocManaged(&wMxijx, idp * sizeof(double*));
-		for (int i = 0; i < idp; i++) {
-			cudaMallocManaged(&wMxijx[i], MAX_NEIB * sizeof(double));
-		}
-		cudaMallocManaged(&wMxijy, idp * sizeof(double*));
-		for (int i = 0; i < idp; i++) {
-			cudaMallocManaged(&wMxijy[i], MAX_NEIB * sizeof(double));
-		}
+		//cudaMallocManaged(&dbweightx, idp * sizeof(double*));
+		//for (int i = 0; i < idp; i++) {
+		//	cudaMallocManaged(&dbweightx[i], MAX_NEIB * sizeof(double));
+		//}
+		//cudaMallocManaged(&dbweighty, idp * sizeof(double*));
+		//for (int i = 0; i < idp; i++) {
+		//	cudaMallocManaged(&dbweighty[i], MAX_NEIB * sizeof(double));
+		//}
+		//cudaMallocManaged(&wMxijx, idp * sizeof(double*));
+		//for (int i = 0; i < idp; i++) {
+		//	cudaMallocManaged(&wMxijx[i], MAX_NEIB * sizeof(double));
+		//}
+		//cudaMallocManaged(&wMxijy, idp * sizeof(double*));
+		//for (int i = 0; i < idp; i++) {
+		//	cudaMallocManaged(&wMxijy[i], MAX_NEIB * sizeof(double));
+		//}
 
 
 		cudaMallocManaged(&m_11, idp * sizeof(double));
