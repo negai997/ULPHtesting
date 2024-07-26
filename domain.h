@@ -1923,9 +1923,9 @@ namespace sph {
 
 		if (stype == ShiftingType::DivC) {
 
-			//run_shifttype_divc_dev0(particleNum(), particlesa.btype, particlesa.hsml, particlesa.shift_c, particlesa.neibNum, particlesa.neiblist, particlesa.mass\
+			run_shifttype_divc_dev0(particleNum(), particlesa.btype, particlesa.hsml, particlesa.shift_c, particlesa.neibNum, particlesa.neiblist, particlesa.mass\
 				, particlesa.rho, particlesa.dbweightx, particlesa.dbweighty, particlesa.vx, particlesa.vy, shiftingCoe, dt, dp, particlesa.shift_x, particlesa.shift_y\
-				, particlesa.x, particlesa.y, particlesa.ux, particlesa.uy, drmax_d, drmax2_d, lock);
+				, particlesa.x, particlesa.y, particlesa.ux, particlesa.uy, drmax_d, drmax2_d, lock, particlesa.iotype, lengthofx);
 
 		}
 		else if (stype == ShiftingType::Velc) {
@@ -1933,7 +1933,7 @@ namespace sph {
 
 			run_shifttype_velc_dev1(particleNum(), particlesa.btype, particlesa.hsml, particlesa.rho, particlesa.c0, particlesa.neibNum, particlesa.neiblist\
 				, particlesa.bweight, bweightdx, particlesa.mass, particlesa.dbweightx, particlesa.dbweighty, particlesa.vx, particlesa.vy, dp, shiftingCoe\
-				, particlesa.shift_x, particlesa.shift_y, particlesa.x, particlesa.y, particlesa.ux, particlesa.uy, drmax_d, drmax2_d, lock);
+				, particlesa.shift_x, particlesa.shift_y, particlesa.x, particlesa.y, particlesa.ux, particlesa.uy, drmax_d, drmax2_d, lock, particlesa.iotype, lengthofx);
 
 		}
 		drmax = *drmax_d;

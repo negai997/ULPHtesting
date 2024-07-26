@@ -1167,7 +1167,7 @@ __global__ void run_half3Nshiftc_dev1(unsigned int particleNum, sph::FixType* ft
 
 __global__ void run_shifttype_divc_dev1(unsigned int particleNum, sph::BoundaryType* btype, double* Hsml, double* shift_c, unsigned int* neibNum, unsigned int** neiblist, double* mass\
 										, double* rho, double** dbweightx, double** dbweighty, double* Vx, double* Vy, double shiftingCoe, double dt, double dp, double* Shift_x, double* Shift_y\
-										, double* x, double* y, double* ux, double* uy, double* drmax, double* drmax2, int* lock) {
+										, double* x, double* y, double* ux, double* uy, double* drmax, double* drmax2, int* lock, sph::InoutType* iotype, double lengthofx) {
 	for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < particleNum; i += gridDim.x * blockDim.x)
 	{
 		/* code */
@@ -1193,6 +1193,14 @@ __global__ void run_shifttype_divc_dev1(unsigned int particleNum, sph::BoundaryT
 			//dbweight
 
 			double dx = x[i] - x[jj];
+			if (iotype[i] == sph::InoutType::Inlet && iotype[jj] == sph::InoutType::Outlet)
+			{
+				dx = x[i] + lengthofx - x[jj];//xi(1)
+			}
+			if (iotype[i] == sph::InoutType::Outlet && iotype[jj] == sph::InoutType::Inlet)
+			{
+				dx = x[i] - lengthofx - x[jj];//xi(1)
+			}
 			double dy = y[i] - y[jj];
 			const double r = sqrt(dx * dx + dy * dy); //q�Ĵ�����ͬ�������һ��mhsml(662-664)
 			const double hsmlj = Hsml[jj];//hsmlΪhsml(i)��hsmljΪhsml(k)
@@ -1254,7 +1262,7 @@ __global__ void run_shifttype_divc_dev1(unsigned int particleNum, sph::BoundaryT
 
 __global__ void run_shifttype_velc_dev1(unsigned int particleNum, sph::BoundaryType* btype, double* Hsml, double* rho, double* C0, unsigned int* neibNum, unsigned int** neiblist\
 										, double** bweight, const double bweightdx, double* mass, double** dbweightx, double** dbweighty, double* Vx, double* Vy, double dp, double shiftingCoe\
-										, double* Shift_x, double* Shift_y, double* x, double* y, double* ux, double* uy, double* drmax, double* drmax2, int* lock) {
+										, double* Shift_x, double* Shift_y, double* x, double* y, double* ux, double* uy, double* drmax, double* drmax2, int* lock, sph::InoutType* iotype, double lengthofx) {
 	for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < particleNum; i += gridDim.x * blockDim.x)
 	{
 		/* code */
@@ -1278,6 +1286,14 @@ __global__ void run_shifttype_velc_dev1(unsigned int particleNum, sph::BoundaryT
 			//dbweight
 
 			double dx = x[i] - x[jj];
+			if (iotype[i] == sph::InoutType::Inlet && iotype[jj] == sph::InoutType::Outlet)
+			{
+				dx = x[i] + lengthofx - x[jj];//xi(1)
+			}
+			if (iotype[i] == sph::InoutType::Outlet && iotype[jj] == sph::InoutType::Inlet)
+			{
+				dx = x[i] - lengthofx - x[jj];//xi(1)
+			}
 			double dy = y[i] - y[jj];
 			const double r = sqrt(dx * dx + dy * dy); //q�Ĵ�����ͬ�������һ��mhsml(662-664)
 			const double hsmlj = Hsml[jj];//hsmlΪhsml(i)��hsmljΪhsml(k)
@@ -1511,20 +1527,20 @@ void run_half3Nshiftc_dev0(unsigned int particleNum, sph::FixType* ftype, double
 
 void run_shifttype_divc_dev0(unsigned int particleNum, sph::BoundaryType* btype, double* Hsml, double* shift_c, unsigned int* neibNum, unsigned int** neiblist, double* mass\
 	, double* rho, double** dbweightx, double** dbweighty, double* Vx, double* Vy, double shiftingCoe, double dt, double dp, double* Shift_x, double* Shift_y\
-	, double* x, double* y, double* ux, double* uy, double* drmax, double* drmax2, int* lock) {
+	, double* x, double* y, double* ux, double* uy, double* drmax, double* drmax2, int* lock, sph::InoutType* iotype, double lengthofx) {
 
 	run_shifttype_divc_dev1<<<blocksNum, threadNum >>>(particleNum,btype, Hsml, shift_c, neibNum, neiblist, mass, rho, dbweightx, dbweighty, Vx, Vy\
-										, shiftingCoe, dt, dp, Shift_x, Shift_y, x, y, ux, uy, drmax, drmax2, lock);
+										, shiftingCoe, dt, dp, Shift_x, Shift_y, x, y, ux, uy, drmax, drmax2, lock, iotype, lengthofx);
 	CHECK(cudaDeviceSynchronize());
 }
 
 void run_shifttype_velc_dev0(unsigned int particleNum, sph::BoundaryType* btype, double* Hsml, double* rho, double* C0, unsigned int* neibNum, unsigned int** neiblist\
 	, double** bweight, const double bweightdx, double* mass, double** dbweightx, double** dbweighty, double* Vx, double* Vy, double dp, double shiftingCoe\
-	, double* Shift_x, double* Shift_y, double* x, double* y, double* ux, double* uy, double* drmax, double* drmax2, int* lock) {
+	, double* Shift_x, double* Shift_y, double* x, double* y, double* ux, double* uy, double* drmax, double* drmax2, int* lock, sph::InoutType* iotype, double lengthofx) {
 
 	run_shifttype_velc_dev1<<<blocksNum, threadNum >>>(particleNum, btype, Hsml, rho, C0, neibNum, neiblist\
 		, bweight, bweightdx, mass, dbweightx, dbweighty, Vx, Vy, dp, shiftingCoe\
-		, Shift_x, Shift_y, x, y, ux, uy, drmax, drmax2, lock);
+		, Shift_x, Shift_y, x, y, ux, uy, drmax, drmax2, lock, iotype, lengthofx);
 	CHECK(cudaDeviceSynchronize());
 }
 

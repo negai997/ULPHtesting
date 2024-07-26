@@ -91,11 +91,11 @@ __global__ void run_half3Nshiftc_dev1(unsigned int particleNum, sph::FixType* ft
 
 __global__ void run_shifttype_divc_dev1(unsigned int particleNum, sph::BoundaryType* btype, double* Hsml, double* shift_c, unsigned int* neibNum, unsigned int** neiblist, double* mass\
 	, double* rho, double** dbweightx, double** dbweighty, double* Vx, double* Vy, double shiftingCoe, double dt, double dp, double* Shift_x, double* Shift_y\
-	, double* x, double* y, double* ux, double* uy, double* drmax, double* drmax2, int* lock);
+	, double* x, double* y, double* ux, double* uy, double* drmax, double* drmax2, int* lock, sph::InoutType* iotype, double lengthofx);
 
 __global__ void run_shifttype_velc_dev1(unsigned int particleNum, sph::BoundaryType* btype, double* Hsml, double* rho, double* C0, unsigned int* neibNum, unsigned int** neiblist\
 	, double** bweight, const double bweightdx, double* mass, double** dbweightx, double** dbweighty, double* Vx, double* Vy, double dp, double shiftingCoe\
-	, double* Shift_x, double* Shift_y, double* x, double* y, double* ux, double* uy, double* drmax, double* drmax2, int* lock);
+	, double* Shift_x, double* Shift_y, double* x, double* y, double* ux, double* uy, double* drmax, double* drmax2, int* lock, sph::InoutType* iotype, double lengthofx);
 
 __global__ void density_filter_dev1(unsigned int particleNum, sph::BoundaryType* btype, double* Hsml, unsigned int* neibNum, unsigned int** neiblist, double* press\
 	, double* back_p, double* c0, double* rho0, double* mass, double* rho, double** bweight);
@@ -157,11 +157,11 @@ void run_half3Nshiftc_dev0(unsigned int particleNum, sph::FixType* ftype, double
 
 void run_shifttype_divc_dev0(unsigned int particleNum, sph::BoundaryType* btype, double* Hsml, double* shift_c, unsigned int* neibNum, unsigned int** neiblist, double* mass\
 	, double* rho, double** dbweightx, double** dbweighty, double* Vx, double* Vy, double shiftingCoe, double dt, double dp, double* Shift_x, double* Shift_y\
-	, double* x, double* y, double* ux, double* uy, double* drmax, double* drmax2, int* lock);
+	, double* x, double* y, double* ux, double* uy, double* drmax, double* drmax2, int* lock, sph::InoutType* iotype, double lengthofx);
 
 void run_shifttype_velc_dev0(unsigned int particleNum, sph::BoundaryType* btype, double* Hsml, double* rho, double* C0, unsigned int* neibNum, unsigned int** neiblist\
 	, double** bweight, const double bweightdx, double* mass, double** dbweightx, double** dbweighty, double* Vx, double* Vy, double dp, double shiftingCoe\
-	, double* Shift_x, double* Shift_y, double* x, double* y, double* ux, double* uy, double* drmax, double* drmax2, int* lock);
+	, double* Shift_x, double* Shift_y, double* x, double* y, double* ux, double* uy, double* drmax, double* drmax2, int* lock, sph::InoutType* iotype, double lengthofx);
 
 void density_filter_dev0(unsigned int particleNum, sph::BoundaryType* btype, double* Hsml, unsigned int* neibNum, unsigned int** neiblist, double* press\
 	, double* back_p, double* c0, double* rho0, double* mass, double* rho, double** bweight);
