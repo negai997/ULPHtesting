@@ -300,13 +300,13 @@ namespace sph {
 		cudaMallocManaged(&neibNum, idp * sizeof(unsigned int));
 		cudaMallocManaged(&neiblist, idp * sizeof(unsigned int*));
 		for (int i = 0; i < idp; i++) {
-			cudaMallocManaged(&neiblist[i], MAX_NEIB * sizeof(unsigned int));
+			cudaMalloc(&neiblist[i], MAX_NEIB * sizeof(unsigned int));
 		}
 
 
 		cudaMallocManaged(&bweight, idp * sizeof(double*));
 		for (int i = 0; i < idp; i++) {
-			cudaMallocManaged(&bweight[i], MAX_NEIB * sizeof(double));
+			cudaMalloc(&bweight[i], MAX_NEIB * sizeof(double));
 		}
 		//cudaMallocManaged(&dbweightx, idp * sizeof(double*));
 		//for (int i = 0; i < idp; i++) {
@@ -326,11 +326,11 @@ namespace sph {
 		//}
 
 
-		cudaMallocManaged(&m_11, idp * sizeof(double));
-		cudaMallocManaged(&m_12, idp * sizeof(double));
-		cudaMallocManaged(&m_21, idp * sizeof(double));
-		cudaMallocManaged(&m_22, idp * sizeof(double));
-		cudaMallocManaged(&M_11, idp * sizeof(double));
+		cudaMalloc(&m_11, idp * sizeof(double));
+		cudaMalloc(&m_12, idp * sizeof(double));
+		cudaMalloc(&m_21, idp * sizeof(double));
+		cudaMalloc(&m_22, idp * sizeof(double));
+		/*cudaMallocManaged(&M_11, idp * sizeof(double));
 		cudaMallocManaged(&M_12, idp * sizeof(double));
 		cudaMallocManaged(&M_13, idp * sizeof(double));
 		cudaMallocManaged(&M_14, idp * sizeof(double));
@@ -339,17 +339,17 @@ namespace sph {
 		cudaMallocManaged(&M_22, idp * sizeof(double));
 		cudaMallocManaged(&M_23, idp * sizeof(double));
 		cudaMallocManaged(&M_24, idp * sizeof(double));
-		cudaMallocManaged(&M_25, idp * sizeof(double));
-		cudaMallocManaged(&M_31, idp * sizeof(double));
-		cudaMallocManaged(&M_32, idp * sizeof(double));
-		cudaMallocManaged(&M_33, idp * sizeof(double));
-		cudaMallocManaged(&M_34, idp * sizeof(double));
-		cudaMallocManaged(&M_35, idp * sizeof(double));
-		cudaMallocManaged(&M_51, idp * sizeof(double));
-		cudaMallocManaged(&M_52, idp * sizeof(double));
-		cudaMallocManaged(&M_53, idp * sizeof(double));
-		cudaMallocManaged(&M_54, idp * sizeof(double));
-		cudaMallocManaged(&M_55, idp * sizeof(double));
+		cudaMallocManaged(&M_25, idp * sizeof(double));*/
+		cudaMalloc(&M_31, idp * sizeof(double));
+		cudaMalloc(&M_32, idp * sizeof(double));
+		cudaMalloc(&M_33, idp * sizeof(double));
+		cudaMalloc(&M_34, idp * sizeof(double));
+		cudaMalloc(&M_35, idp * sizeof(double));
+		cudaMalloc(&M_51, idp * sizeof(double));
+		cudaMalloc(&M_52, idp * sizeof(double));
+		cudaMalloc(&M_53, idp * sizeof(double));
+		cudaMalloc(&M_54, idp * sizeof(double));
+		cudaMalloc(&M_55, idp * sizeof(double));
 		cudaMallocManaged(&tau11, idp * sizeof(double));
 		cudaMallocManaged(&tau12, idp * sizeof(double));
 		cudaMallocManaged(&tau21, idp * sizeof(double));
@@ -428,41 +428,41 @@ namespace sph {
 			shift_y[i] = particles[i]->shift_y;
 			
 			////std::vector<class particle*> neiblist;
-			neibNum[i] = particles[i]->neibNum;
-			for (int i = 0; i < idp; i++) {
-				for (int j = 0; j < neibNum[i]; j++)
-				neiblist[i][j] = particles[i]->neiblist[j]->idx;
-			}
+			//neibNum[i] = particles[i]->neibNum;
+			//for (int i = 0; i < idp; i++) {
+			//	for (int j = 0; j < neibNum[i]; j++)
+			//	neiblist[i][j] = particles[i]->neiblist[j]->idx;
+			//}
 
 
-			for (int i = 0; i < idp; i++) {
-				for (int j = 0; j < neibNum[i]; j++)
-				bweight[i][j] = particles[i]->bweight[j];
-			}
-			for (int i = 0; i < idp; i++) {
-				for (int j = 0; j < neibNum[i]; j++)
-					dbweightx[i][j] = particles[i]->dbweightx[j];
-			}
-			for (int i = 0; i < idp; i++) {
-				for (int j = 0; j < neibNum[i]; j++)
-					dbweighty[i][j] = particles[i]->dbweighty[j];
-			}
-			for (int i = 0; i < idp; i++) {
-				for (int j = 0; j < neibNum[i]; j++)
-					wMxijx[i][j] = particles[i]->wMxijx[j];
-			}
-			for (int i = 0; i < idp; i++) {
-				for (int j = 0; j < neibNum[i]; j++)
-					wMxijy[i][j] = particles[i]->wMxijy[j];
-			}
+			//for (int i = 0; i < idp; i++) {
+			//	for (int j = 0; j < neibNum[i]; j++)
+			//	bweight[i][j] = particles[i]->bweight[j];
+			//}
+			//for (int i = 0; i < idp; i++) {
+			//	for (int j = 0; j < neibNum[i]; j++)
+			//		dbweightx[i][j] = particles[i]->dbweightx[j];
+			//}
+			//for (int i = 0; i < idp; i++) {
+			//	for (int j = 0; j < neibNum[i]; j++)
+			//		dbweighty[i][j] = particles[i]->dbweighty[j];
+			//}
+			//for (int i = 0; i < idp; i++) {
+			//	for (int j = 0; j < neibNum[i]; j++)
+			//		wMxijx[i][j] = particles[i]->wMxijx[j];
+			//}
+			//for (int i = 0; i < idp; i++) {
+			//	for (int j = 0; j < neibNum[i]; j++)
+			//		wMxijy[i][j] = particles[i]->wMxijy[j];
+			//}
 
 
 
-			m_11[i] = particles[i]->m_11;
+	/*		m_11[i] = particles[i]->m_11;
 			m_12[i] = particles[i]->m_12;
 			m_21[i] = particles[i]->m_21;
-			m_22[i] = particles[i]->m_22;
-			M_11[i] = particles[i]->M_11;
+			m_22[i] = particles[i]->m_22;*/
+			/*M_11[i] = particles[i]->M_11;
 			M_12[i] = particles[i]->M_12;
 			M_13[i] = particles[i]->M_13;
 			M_14[i] = particles[i]->M_14;
@@ -471,8 +471,8 @@ namespace sph {
 			M_22[i] = particles[i]->M_22;
 			M_23[i] = particles[i]->M_23;
 			M_24[i] = particles[i]->M_24;
-			M_25[i] = particles[i]->M_25;
-			M_31[i] = particles[i]->M_31;
+			M_25[i] = particles[i]->M_25;*/
+	/*		M_31[i] = particles[i]->M_31;
 			M_32[i] = particles[i]->M_32;
 			M_33[i] = particles[i]->M_33;
 			M_34[i] = particles[i]->M_34;
@@ -481,7 +481,7 @@ namespace sph {
 			M_52[i] = particles[i]->M_52;
 			M_53[i] = particles[i]->M_53;
 			M_54[i] = particles[i]->M_54;
-			M_55[i] = particles[i]->M_55;
+			M_55[i] = particles[i]->M_55;*/
 			tau11[i] = particles[i]->tau11;
 			tau12[i] = particles[i]->tau12;
 			tau21[i] = particles[i]->tau21;

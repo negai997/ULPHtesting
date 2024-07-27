@@ -992,10 +992,10 @@ namespace sph {
 		cudaMalloc(&celldata, sizeof(int) * particleNum());
 		cudaMalloc(&d_vmax, sizeof(double));
 		h_vmax = (double*)malloc(sizeof(double));
-		cudaMalloc(&lock, sizeof(int));
-		int* lock_h = (int*)malloc(sizeof(int));
-		*lock_h = 0;
-		cudaMemcpy(lock, lock_h, sizeof(int), cudaMemcpyHostToDevice);
+		//cudaMalloc(&lock, sizeof(int));
+		//int* lock_h = (int*)malloc(sizeof(int));
+		//*lock_h = 0;
+		//cudaMemcpy(lock, lock_h, sizeof(int), cudaMemcpyHostToDevice);
 
 		//int deviceId;
 		//cudaGetDevice(&deviceId);
@@ -1084,7 +1084,7 @@ namespace sph {
 		cudaFree(ygcell);
 		cudaFree(celldata);
 		cudaFree(d_vmax);
-		cudaFree(lock);
+		//cudaFree(lock);
 
 		++pbar;
 		this->output(istep);
@@ -1208,6 +1208,14 @@ namespace sph {
 			grid_h[gridi] = 0;
 		}
 		cudaMemcpy(grid_d, grid_h, sizeof(int) * ngridx * ngridy, cudaMemcpyHostToDevice);
+
+		cudaMalloc(&lock, sizeof(int) * ngridx * ngridy);
+		int* lock_h = (int*)malloc(sizeof(int) * ngridx * ngridy);
+		for (int locki = 0; locki < ngridx * ngridy; locki++) {
+			lock_h[locki] = 0;
+		}
+		cudaMemcpy(lock, lock_h, sizeof(int) * ngridx * ngridy, cudaMemcpyHostToDevice);
+
 		//cudaMemPrefetchAsync(grid_d, sizeof(int) * ngridx * ngridy, deviceId, NULL);
 
 		//int* xgcell = new int[ntotal];//三个数组，分别来存储每个粒子的编号信息
@@ -1238,6 +1246,7 @@ namespace sph {
 		//cudaFree(y_max);
 		//cudaFree(y_min);
 		cudaFree(grid_d);
+		cudaFree(lock);
 		//cudaFree(xgcell);
 		//cudaFree(ygcell);
 		//cudaFree(celldata);
@@ -1875,6 +1884,7 @@ namespace sph {
 		//this->single_step0();
 		//this->single_step_temperature();
 		this->single_step_temperature_gaojie();
+		cudaDeviceSynchronize();
 		vmax = 0;
 
 		//double* d_vmax;

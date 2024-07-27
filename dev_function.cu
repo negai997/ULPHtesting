@@ -306,7 +306,8 @@ __global__ void buildNeighb_dev2(unsigned int particleNum, double* X, double* Y,
 		for (int s = 0; s < 32; s++) {
 			if ((blockDim.x * blockIdx.x + threadIdx.x) % 32 != s)
 				continue;
-			while (atomicCAS(lock, 0, 1) != 0);
+			//__threadfence();
+			while (atomicCAS(&(lock[(xxcell - 1) * ngridy + yycell - 1]), 0, 1) != 0);
 
 			celldata[i - 1] = static_cast<int>(grid_d[(xxcell - 1) * ngridy + yycell - 1]);//记录粒子所在的网格编号；
 			//但是后面有一句grid(xxcell, yycell) = i;这样就不再是记录网格编号，而是记录i，即粒子id
@@ -319,8 +320,9 @@ __global__ void buildNeighb_dev2(unsigned int particleNum, double* X, double* Y,
 		//std::cerr << std::endl << "grid(xxcell, yycell): " << grid(xxcell, yycell) << std::endl;
 			grid_d[(xxcell - 1) * ngridy + yycell - 1] = i;// i starts from 0 //没理解这句什么意思？
 			//std::cerr << std::endl << "grid(xxcell, yycell): " << grid(xxcell, yycell) << std::endl;
-			atomicExch(lock, 0);
 			__threadfence();
+			atomicExch(&(lock[(xxcell - 1) * ngridy + yycell - 1]), 0);
+			//__threadfence();
 		}
 
 	}
@@ -1679,10 +1681,10 @@ __global__ void single_temp_shapematrix_dev1(unsigned int particleNum, sph::Boun
 		const double hsml = Hsml[i];
 		const double xi = x[i];
 		const double yi = y[i];
-		double k_11 = 0;//K
-		double k_12 = 0;
-		double k_21 = 0;
-		double k_22 = 0;
+		//double k_11 = 0;//K
+		//double k_12 = 0;
+		//double k_21 = 0;
+		//double k_22 = 0;
 		double m_11t = 0;
 		double m_12t = 0;
 		double m_21t = 0;
@@ -1690,11 +1692,11 @@ __global__ void single_temp_shapematrix_dev1(unsigned int particleNum, sph::Boun
 		double matrix[5][5];//M矩阵
 		double inverse[5][5];//逆矩阵			
 		int size = 5;
-		matrix[0][0] = matrix[0][1] = matrix[0][2] = matrix[0][3] = matrix[0][4] = 0;
-		matrix[1][0] = matrix[1][1] = matrix[1][2] = matrix[1][3] = matrix[1][4] = 0;
-		matrix[2][0] = matrix[2][1] = matrix[2][2] = matrix[2][3] = matrix[2][4] = 0;
-		matrix[3][0] = matrix[3][1] = matrix[3][2] = matrix[3][3] = matrix[3][4] = 0;
-		matrix[4][0] = matrix[4][1] = matrix[4][2] = matrix[4][3] = matrix[4][4] = 0;
+		//matrix[0][0] = matrix[0][1] = matrix[0][2] = matrix[0][3] = matrix[0][4] = 0;
+		//matrix[1][0] = matrix[1][1] = matrix[1][2] = matrix[1][3] = matrix[1][4] = 0;
+		//matrix[2][0] = matrix[2][1] = matrix[2][2] = matrix[2][3] = matrix[2][4] = 0;
+		//matrix[3][0] = matrix[3][1] = matrix[3][2] = matrix[3][3] = matrix[3][4] = 0;
+		//matrix[4][0] = matrix[4][1] = matrix[4][2] = matrix[4][3] = matrix[4][4] = 0;
 		//将每个元素的值代入矩阵，创建M矩阵
 		double a00 = 0; double a01 = 0; double a02 = 0; double a03 = 0; double a04 = 0;
 		double a11 = 0; double a14 = 0;
@@ -1795,16 +1797,16 @@ __global__ void single_temp_shapematrix_dev1(unsigned int particleNum, sph::Boun
 		inverseMatrix_d(matrix, inverse, size);
 		/*std::cout << "Inverse matrix of particle" <<i<< std::endl;
 		displayMatrix(inverse, size);*/
-		M_11[i] = inverse[0][0];
-		M_12[i] = inverse[0][1];
-		M_13[i] = inverse[0][2];
-		M_14[i] = inverse[0][3];
-		M_15[i] = inverse[0][4];
-		M_21[i] = inverse[1][0];
-		M_22[i] = inverse[1][1];
-		M_23[i] = inverse[1][2];
-		M_24[i] = inverse[1][3];
-		M_25[i] = inverse[1][4];
+		//M_11[i] = inverse[0][0];
+		//M_12[i] = inverse[0][1];
+		//M_13[i] = inverse[0][2];
+		//M_14[i] = inverse[0][3];
+		//M_15[i] = inverse[0][4];
+		//M_21[i] = inverse[1][0];
+		//M_22[i] = inverse[1][1];
+		//M_23[i] = inverse[1][2];
+		//M_24[i] = inverse[1][3];
+		//M_25[i] = inverse[1][4];
 		M_31[i] = inverse[2][0];//M的二阶逆矩阵的部分元素
 		M_32[i] = inverse[2][1];
 		M_33[i] = inverse[2][2];
@@ -2337,7 +2339,7 @@ __global__ void single_step_fluid_eom_dev1(unsigned int particleNum, sph::Bounda
 
 void single_temp_eos_dev0(unsigned int particleNum, sph::BoundaryType* btype, double* C0, double* Rho0, double* rho, double* Gamma, double* back_p, double* press) {
 	single_temp_eos_dev1<<<blocksNum, threadNum >>>(particleNum, btype, C0, Rho0, rho, Gamma, back_p, press);
-	CHECK(cudaDeviceSynchronize());
+	//CHECK(cudaDeviceSynchronize());
 }
 
 void single_temp_boundary_dev0(unsigned int particleNum, sph::BoundaryType* btype, unsigned int* neibNum, unsigned int** neiblist, sph::FixType* ftype, double* mass, double* rho\
@@ -2390,5 +2392,5 @@ void single_step_fluid_eom_dev0(unsigned int particleNum, sph::BoundaryType* bty
 		, neibNum, neiblist, bweight, iotype, lengthofx, wMxijx, wMxijy, ax, ay\
 		, m_11, m_12, m_21, m_22, press, vx, vy, mass, tau11, tau12, tau21, tau22\
 		, turb11, turb12, turb21, turb22, fintx, finty, ftype, Avx, Avy, turbx, turby);
-	CHECK(cudaDeviceSynchronize());
+	//CHECK(cudaDeviceSynchronize());
 }
